@@ -1,26 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Building, 
-  Clock, 
-  Tag, 
-  HelpCircle, 
-  Plus, 
-  Trash2, 
-  Save, 
-  Check, 
-  AlertCircle,
-  Sparkles
+import {
+  Building,
+  Clock,
+  Tag,
+  HelpCircle,
+  Plus,
+  Trash2,
+  Save,
+  Check
 } from 'lucide-react';
 
-export default function BusinessSettings({ initialBusiness, onSave, onApplyTemplate }) {
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const toInputTime = (value) => {
+  const raw = String(value || '');
+  if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+  if (!match) return '';
+  let hour = Number(match[1]); if (match[3].toUpperCase() === 'PM' && hour !== 12) hour += 12; if (match[3].toUpperCase() === 'AM' && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, '0')}:${match[2]}`;
+};
+const completeHours = (hours = []) => WEEK_DAYS.map((day) => {
+  const saved = hours.find((item) => item.day === day);
+  return saved ? { day, closed: Boolean(saved.closed), open: toInputTime(saved.open), close: toInputTime(saved.close) } : { day, closed: true, open: '', close: '' };
+});
+
+export default function BusinessSettings({ initialBusiness, onSave, onSaveHours, onApplyTemplate }) {
   const [formData, setFormData] = useState(initialBusiness || {});
-  const [activeSection, setActiveSection] = useState('profile'); // 'profile' | 'hours' | 'services' | 'faqs'
+  const [activeSection, setActiveSection] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [hoursSaved, setHoursSaved] = useState(false);
+  const [hoursError, setHoursError] = useState('');
 
   useEffect(() => {
     if (initialBusiness) {
-      setFormData(initialBusiness);
+      setFormData({ ...initialBusiness, openingHours: completeHours(initialBusiness.openingHours), timezone: initialBusiness.timezone || 'Asia/Kolkata' });
     }
   }, [initialBusiness]);
 
@@ -35,17 +49,18 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
     setFormData(prev => ({ ...prev, openingHours: updatedHours }));
   };
 
+  const handleSaveHours = async () => {
+    setIsSaving(true); setHoursError(''); setHoursSaved(false);
+    try {
+      await onSaveHours({ openingHours: completeHours(formData.openingHours), timezone: formData.timezone || 'Asia/Kolkata' });
+      setHoursSaved(true); setTimeout(() => setHoursSaved(false), 3000);
+    } catch (error) { setHoursError(error.message || 'Could not save business hours.'); }
+    finally { setIsSaving(false); }
+  };
+
   const handleAddService = () => {
-    const newService = {
-      id: `s-${Date.now()}`,
-      name: '',
-      price: '',
-      description: ''
-    };
-    setFormData(prev => ({
-      ...prev,
-      services: [...(prev.services || []), newService]
-    }));
+    const newService = { id: `s-${Date.now()}`, name: '', price: '', description: '' };
+    setFormData(prev => ({ ...prev, services: [...(prev.services || []), newService] }));
   };
 
   const handleServiceChange = (index, field, value) => {
@@ -61,15 +76,8 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
   };
 
   const handleAddFaq = () => {
-    const newFaq = {
-      id: `f-${Date.now()}`,
-      question: '',
-      answer: ''
-    };
-    setFormData(prev => ({
-      ...prev,
-      faqs: [...(prev.faqs || []), newFaq]
-    }));
+    const newFaq = { id: `f-${Date.now()}`, question: '', answer: '' };
+    setFormData(prev => ({ ...prev, faqs: [...(prev.faqs || []), newFaq] }));
   };
 
   const handleFaqChange = (index, field, value) => {
@@ -100,212 +108,192 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm">
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl border" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
         <div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight">
-            Business Knowledge & Onboarding
+          <h1 className="text-xl font-bold" style={{ color: '#FFFFFF' }}>
+            Business Information
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            The AI Receptionist automatically reads this information to answer customer messages on WhatsApp.
+          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+            The AI Receptionist uses this information to answer customer inquiries on WhatsApp.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {savedSuccess && (
-            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 animate-fadeIn">
+            <span className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg border" style={{ background: 'rgba(0, 230, 118, 0.1)', borderColor: 'rgba(0, 230, 118, 0.3)', color: '#00E676' }}>
               <Check className="w-3.5 h-3.5" />
-              Saved & Active!
+              Saved
             </span>
           )}
 
           <button
             onClick={handleSubmit}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all disabled:opacity-50"
+            style={{ background: '#00E676', color: '#080F0F' }}
           >
             <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save Knowledge Base'}
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
+      {/* Sub-Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <button
-          onClick={() => setActiveSection('profile')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeSection === 'profile'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <Building className="w-4 h-4" />
-          1. Business Profile
-        </button>
-
-        <button
-          onClick={() => setActiveSection('hours')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeSection === 'hours'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          2. Opening Hours
-        </button>
-
-        <button
-          onClick={() => setActiveSection('services')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeSection === 'services'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <Tag className="w-4 h-4" />
-          3. Services & Prices ({formData.services?.length || 0})
-        </button>
-
-        <button
-          onClick={() => setActiveSection('faqs')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-            activeSection === 'faqs'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" />
-          4. FAQs & Answers ({formData.faqs?.length || 0})
-        </button>
+        {[
+          { id: 'profile', label: '1. Profile', icon: Building },
+          { id: 'hours', label: '2. Hours', icon: Clock },
+          { id: 'services', label: `3. Services (${formData.services?.length || 0})`, icon: Tag },
+          { id: 'faqs', label: `4. FAQs (${formData.faqs?.length || 0})`, icon: HelpCircle },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveSection(id)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border"
+            style={{
+              background: activeSection === id ? '#00E676' : '#0D1515',
+              borderColor: activeSection === id ? '#00E676' : '#1C2929',
+              color: activeSection === id ? '#080F0F' : '#6B7280'
+            }}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Tab 1: Business Profile */}
+      {/* Tab 1: Profile */}
       {activeSection === 'profile' && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-bold text-slate-900">General Business Identity</h2>
-            <p className="text-xs text-slate-500">How your business introduces itself to WhatsApp customers.</p>
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+          <div className="border-b pb-3" style={{ borderColor: '#1C2929' }}>
+            <h2 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>General Business Identity</h2>
+            <p className="text-xs" style={{ color: '#6B7280' }}>How your business introduces itself to WhatsApp customers.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Business Name *
-              </label>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Business Name *</label>
               <input
                 type="text"
                 name="name"
                 value={formData.name || ''}
                 onChange={handleProfileChange}
                 placeholder="e.g. Glow & Co. Wellness Spa"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+                style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Tagline / Specialty
-              </label>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Tagline / Specialty</label>
               <input
                 type="text"
                 name="tagline"
                 value={formData.tagline || ''}
                 onChange={handleProfileChange}
-                placeholder="e.g. Boutique Massage, Organic Skincare & Holistic Therapy"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="e.g. Boutique Massage & Skincare"
+                className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+                style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Phone Number
-              </label>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Phone Number</label>
               <input
                 type="text"
                 name="phone"
                 value={formData.phone || ''}
                 onChange={handleProfileChange}
                 placeholder="e.g. +1 (555) 349-2810"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+                style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Physical Address (for directions & parking inquiries)
-              </label>
+              <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Physical Address</label>
               <input
                 type="text"
                 name="address"
                 value={formData.address || ''}
                 onChange={handleProfileChange}
-                placeholder="e.g. 142 Lotus Blossom Way, Suite 200, Austin, TX 78701"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="e.g. 142 Lotus Blossom Way, Austin, TX"
+                className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+                style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Business Description & Atmosphere
-            </label>
+            <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Business Description</label>
             <textarea
               name="description"
               rows={3}
               value={formData.description || ''}
               onChange={handleProfileChange}
-              placeholder="Describe your business, vibe, clientele, and mission..."
-              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Describe your business, services, and mission..."
+              className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+              style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
             />
           </div>
         </div>
       )}
 
-      {/* Tab 2: Opening Hours */}
+      {/* Tab 2: Hours */}
       {activeSection === 'hours' && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-bold text-slate-900">Weekly Operating Schedule</h2>
-            <p className="text-xs text-slate-500">The AI uses this to answer questions like "Are you open on Sunday?" or "What time do you close?".</p>
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+          <div className="border-b pb-3" style={{ borderColor: '#1C2929' }}>
+            <h2 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Business Hours</h2>
+            <p className="text-xs" style={{ color: '#6B7280' }}>Set when your business is open for customer appointments and visits.</p>
           </div>
 
-          <div className="divide-y divide-slate-100">
+          <div className="max-w-sm">
+            <label className="block text-xs font-bold mb-1" style={{ color: '#E5E7EB' }}>Timezone</label>
+            <input
+              value={formData.timezone || 'Asia/Kolkata'}
+              onChange={(e) => setFormData((prev) => ({ ...prev, timezone: e.target.value }))}
+              placeholder="Asia/Kolkata"
+              className="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-[#00E676]"
+              style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
+            />
+          </div>
+
+          <div className="divide-y" style={{ borderColor: '#1C2929' }}>
             {(formData.openingHours || []).map((schedule, idx) => (
               <div key={schedule.day} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="w-28 font-bold text-xs text-slate-800">
+                <div className="w-28 font-bold text-xs" style={{ color: '#FFFFFF' }}>
                   {schedule.day}
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: '#E5E7EB' }}>
                     <input
                       type="checkbox"
-                      checked={schedule.closed}
-                      onChange={(e) => handleHourChange(idx, 'closed', e.target.checked)}
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                      checked={!schedule.closed}
+                      onChange={(e) => handleHourChange(idx, 'closed', !e.target.checked)}
+                      className="rounded"
                     />
-                    Closed
+                    Open
                   </label>
 
                   {!schedule.closed && (
                     <div className="flex items-center gap-2">
                       <input
-                        type="text"
+                        type="time"
                         value={schedule.open}
                         onChange={(e) => handleHourChange(idx, 'open', e.target.value)}
-                        className="w-24 px-2 py-1 text-xs rounded border border-slate-300 text-center"
-                        placeholder="09:00 AM"
+                        className="w-24 px-2 py-1 text-xs rounded-lg border text-center"
+                        style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
                       />
-                      <span className="text-xs text-slate-400">to</span>
+                      <span className="text-xs" style={{ color: '#6B7280' }}>to</span>
                       <input
-                        type="text"
+                        type="time"
                         value={schedule.close}
                         onChange={(e) => handleHourChange(idx, 'close', e.target.value)}
-                        className="w-24 px-2 py-1 text-xs rounded border border-slate-300 text-center"
-                        placeholder="06:00 PM"
+                        className="w-24 px-2 py-1 text-xs rounded-lg border text-center"
+                        style={{ background: '#111A1A', borderColor: '#1C2929', color: '#FFFFFF' }}
                       />
                     </div>
                   )}
@@ -313,21 +301,38 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
               </div>
             ))}
           </div>
+
+          {hoursError && <p className="p-3 text-xs rounded-xl border border-red-500/20 bg-red-500/10 text-red-400">{hoursError}</p>}
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            {hoursSaved && <span className="text-xs font-bold" style={{ color: '#00E676' }}>Hours saved</span>}
+            <button
+              type="button"
+              onClick={handleSaveHours}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              style={{ background: '#00E676', color: '#080F0F' }}
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : 'Save Hours'}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Tab 3: Services & Prices */}
+      {/* Tab 3: Services */}
       {activeSection === 'services' && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: '#1C2929' }}>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Services & Pricing Menu</h2>
-              <p className="text-xs text-slate-500">Enter every service and exact price so the AI can provide immediate quotes.</p>
+              <h2 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Services & Pricing Menu</h2>
+              <p className="text-xs" style={{ color: '#6B7280' }}>Enter your services and prices so AI can give accurate quotes.</p>
             </div>
             <button
               type="button"
               onClick={handleAddService}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors"
+              style={{ background: '#111A1A', borderColor: '#1C2929', color: '#00E676' }}
             >
               <Plus className="w-3.5 h-3.5" />
               Add Service
@@ -336,26 +341,29 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
 
           <div className="space-y-3">
             {(formData.services || []).map((service, idx) => (
-              <div key={service.id || idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+              <div key={service.id || idx} className="p-4 rounded-xl border space-y-2" style={{ background: '#111A1A', borderColor: '#1C2929' }}>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={service.name}
                     onChange={(e) => handleServiceChange(idx, 'name', e.target.value)}
-                    placeholder="Service Name (e.g. Swedish Relaxation Massage)"
-                    className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Service Name"
+                    className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border focus:outline-none focus:border-[#00E676]"
+                    style={{ background: '#0D1515', borderColor: '#1C2929', color: '#FFFFFF' }}
                   />
                   <input
                     type="text"
                     value={service.price}
                     onChange={(e) => handleServiceChange(idx, 'price', e.target.value)}
-                    placeholder="Price (e.g. $95)"
-                    className="w-28 px-3 py-1.5 text-xs font-bold text-emerald-700 rounded-lg border border-slate-300 bg-white text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Price"
+                    className="w-24 px-3 py-1.5 text-xs font-bold rounded-lg border text-center focus:outline-none focus:border-[#00E676]"
+                    style={{ background: '#0D1515', borderColor: '#1C2929', color: '#00E676' }}
                   />
                   <button
                     type="button"
                     onClick={() => handleDeleteService(idx)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                    className="p-1.5 rounded-lg hover:text-red-400 transition-colors"
+                    style={{ color: '#6B7280' }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -364,14 +372,15 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
                   type="text"
                   value={service.description}
                   onChange={(e) => handleServiceChange(idx, 'description', e.target.value)}
-                  placeholder="Short description / duration (e.g. 60-minute full body gentle therapy)"
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Short description"
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border focus:outline-none focus:border-[#00E676]"
+                  style={{ background: '#0D1515', borderColor: '#1C2929', color: '#E5E7EB' }}
                 />
               </div>
             ))}
 
             {(formData.services || []).length === 0 && (
-              <div className="py-8 text-center text-xs text-slate-400">
+              <div className="py-8 text-center text-xs" style={{ color: '#6B7280' }}>
                 No services added yet. Click "+ Add Service" above.
               </div>
             )}
@@ -381,16 +390,17 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
 
       {/* Tab 4: FAQs */}
       {activeSection === 'faqs' && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: '#1C2929' }}>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Custom FAQs & Front Desk Policies</h2>
-              <p className="text-xs text-slate-500">Provide official answers for parking, appointments, walk-ins, cancellations, insurance, etc.</p>
+              <h2 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Custom FAQs</h2>
+              <p className="text-xs" style={{ color: '#6B7280' }}>Provide official answers for parking, appointments, policies, etc.</p>
             </div>
             <button
               type="button"
               onClick={handleAddFaq}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors"
+              style={{ background: '#111A1A', borderColor: '#1C2929', color: '#00E676' }}
             >
               <Plus className="w-3.5 h-3.5" />
               Add FAQ
@@ -399,19 +409,21 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
 
           <div className="space-y-3">
             {(formData.faqs || []).map((faq, idx) => (
-              <div key={faq.id || idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+              <div key={faq.id || idx} className="p-4 rounded-xl border space-y-2" style={{ background: '#111A1A', borderColor: '#1C2929' }}>
                 <div className="flex items-start gap-2">
                   <input
                     type="text"
                     value={faq.question}
                     onChange={(e) => handleFaqChange(idx, 'question', e.target.value)}
-                    placeholder="Question (e.g. Do I need an appointment or do you accept walk-ins?)"
-                    className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Question"
+                    className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border focus:outline-none focus:border-[#00E676]"
+                    style={{ background: '#0D1515', borderColor: '#1C2929', color: '#FFFFFF' }}
                   />
                   <button
                     type="button"
                     onClick={() => handleDeleteFaq(idx)}
-                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors mt-0.5"
+                    className="p-1.5 rounded-lg hover:text-red-400 transition-colors mt-0.5"
+                    style={{ color: '#6B7280' }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -420,14 +432,15 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
                   rows={2}
                   value={faq.answer}
                   onChange={(e) => handleFaqChange(idx, 'answer', e.target.value)}
-                  placeholder="Official Answer given to customer..."
-                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Official answer..."
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border focus:outline-none focus:border-[#00E676]"
+                  style={{ background: '#0D1515', borderColor: '#1C2929', color: '#E5E7EB' }}
                 />
               </div>
             ))}
 
             {(formData.faqs || []).length === 0 && (
-              <div className="py-8 text-center text-xs text-slate-400">
+              <div className="py-8 text-center text-xs" style={{ color: '#6B7280' }}>
                 No FAQs added yet. Click "+ Add FAQ" above.
               </div>
             )}
@@ -435,18 +448,13 @@ export default function BusinessSettings({ initialBusiness, onSave, onApplyTempl
         </div>
       )}
 
-      {/* Bottom Save Bar */}
+      {/* Bottom Save */}
       <div className="flex items-center justify-end gap-3 pt-2">
-        {savedSuccess && (
-          <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
-            <Check className="w-4 h-4" />
-            Saved & Active!
-          </span>
-        )}
         <button
           onClick={handleSubmit}
           disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all disabled:opacity-50"
+          style={{ background: '#00E676', color: '#080F0F' }}
         >
           <Save className="w-4 h-4" />
           {isSaving ? 'Saving Changes...' : 'Save Knowledge Base'}

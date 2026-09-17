@@ -48,6 +48,8 @@ cp .env.example .env
 ```
 *(Optional: Add `GEMINI_API_KEY` for Google Gemini AI generation. If left blank, the built-in local knowledge engine runs automatically!)*
 
+For Google sign-in, see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). The local authorized redirect URI is `http://localhost:3001/api/auth/google/callback`.
+
 ### 3. Run Development Server
 ```bash
 npm run dev

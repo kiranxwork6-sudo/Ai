@@ -1,134 +1,46 @@
-import assert from 'assert';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 
-const BASE_URL = 'http://localhost:3001/api';
+const baseUrl = process.env.BASE_URL || 'http://localhost:3001/api';
 
-async function runTests() {
-  console.log('🧪 Starting AI Receptionist Automated API Test Suite...\n');
-
-  // 1. Health Check
-  console.log('1️⃣ Testing /api/health...');
-  const healthRes = await fetch(`${BASE_URL}/health`);
-  const healthData = await healthRes.json();
-  assert.strictEqual(healthData.status, 'ok', 'Health status should be ok');
-  console.log('   ✅ Health endpoint is responsive.\n');
-
-  // 2. Business Profile
-  console.log('2️⃣ Testing GET /api/business...');
-  const bizRes = await fetch(`${BASE_URL}/business`);
-  const bizData = await bizRes.json();
-  assert(bizData.success, 'Business endpoint failed');
-  assert(bizData.business.name, 'Business should have a name');
-  console.log(`   ✅ Loaded business: "${bizData.business.name}"`);
-  console.log(`   ✅ Services count: ${bizData.business.services.length}`);
-  console.log(`   ✅ FAQs count: ${bizData.business.faqs.length}\n`);
-
-  // 3. WhatsApp Status
-  console.log('3️⃣ Testing GET /api/whatsapp/status...');
-  const waRes = await fetch(`${BASE_URL}/whatsapp/status`);
-  const waData = await waRes.json();
-  assert(waData.success, 'WhatsApp status failed');
-  console.log(`   ✅ WhatsApp status: ${waData.status.statusMessage}`);
-  console.log(`   ✅ WhatsApp mode: ${waData.status.mode}\n`);
-
-  // 4. Simulate Customer Asking about Saturday Hours
-  console.log('4️⃣ Simulating customer WhatsApp message: "What are your hours on Saturday?"...');
-  const testPhone = `+1 (555) 999-${Math.floor(1000 + Math.random() * 9000)}`;
-  const simRes1 = await fetch(`${BASE_URL}/simulate/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      customerPhone: testPhone,
-      customerName: 'Alex Test',
-      message: 'What are your hours on Saturday?'
-    })
-  });
-  const simData1 = await simRes1.json();
-  assert(simData1.success, 'Simulation failed');
-  assert(simData1.aiReply, 'AI should have generated a reply');
-  console.log(`   📩 Customer asked: "What are your hours on Saturday?"`);
-  console.log(`   🤖 AI Receptionist replied: "${simData1.aiReply.text}"`);
-  assert(
-    simData1.aiReply.text.toLowerCase().includes('saturday') || simData1.aiReply.text.includes('10:00 AM'),
-    'AI reply should mention Saturday hours'
-  );
-  console.log('   ✅ AI correctly grounded answer in business hours!\n');
-
-  // 5. Simulate Customer Asking about Pricing
-  console.log('5️⃣ Simulating customer WhatsApp message: "How much is the Swedish massage?"...');
-  const simRes2 = await fetch(`${BASE_URL}/simulate/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      customerPhone: testPhone,
-      customerName: 'Alex Test',
-      message: 'How much is the Swedish massage?'
-    })
-  });
-  const simData2 = await simRes2.json();
-  assert(simData2.aiReply, 'AI should answer pricing query');
-  console.log(`   📩 Customer asked: "How much is the Swedish massage?"`);
-  console.log(`   🤖 AI Receptionist replied: "${simData2.aiReply.text}"`);
-  assert(simData2.aiReply.text.includes('$95') || simData2.aiReply.text.toLowerCase().includes('swedish'), 'AI reply should state the $95 price');
-  console.log('   ✅ AI correctly grounded answer in business pricing!\n');
-
-  // 6. Test Human Handoff Feature
-  const convId = simData2.conversation.id;
-  console.log(`6️⃣ Testing Human Handoff on conversation ${convId}...`);
-  // Switch to human mode
-  const handoffRes1 = await fetch(`${BASE_URL}/conversations/${convId}/handoff`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'human' })
-  });
-  const handoffData1 = await handoffRes1.json();
-  assert.strictEqual(handoffData1.conversation.status, 'human', 'Status should be human');
-  console.log('   ✅ Human takeover enabled.');
-
-  // Customer asks another question while Human takeover is active
-  console.log('   📩 Customer sends: "Can I get a custom quote for a corporate group of 8?"');
-  const simRes3 = await fetch(`${BASE_URL}/simulate/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      customerPhone: testPhone,
-      customerName: 'Alex Test',
-      message: 'Can I get a custom quote for a corporate group of 8?'
-    })
-  });
-  const simData3 = await simRes3.json();
-  assert.strictEqual(simData3.aiReply, null, 'AI should NOT reply when human takeover is active');
-  console.log('   ✅ AI receptionist stood down as expected during human handoff.\n');
-
-  // Human staff replies
-  console.log('7️⃣ Testing Human Staff Reply...');
-  const replyRes = await fetch(`${BASE_URL}/conversations/${convId}/reply`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text: 'Hi Alex! This is the manager. We would love to host your corporate group of 8! Let me email you our group package options.'
-    })
-  });
-  const replyData = await replyRes.json();
-  assert(replyData.success, 'Human reply failed');
-  assert.strictEqual(replyData.message.sender, 'human');
-  console.log(`   👤 Staff sent: "${replyData.message.text}"`);
-  console.log('   ✅ Human staff reply sent and recorded.\n');
-
-  // Return to AI mode
-  console.log('8️⃣ Returning conversation to AI mode...');
-  const handoffRes2 = await fetch(`${BASE_URL}/conversations/${convId}/handoff`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'ai' })
-  });
-  const handoffData2 = await handoffRes2.json();
-  assert.strictEqual(handoffData2.conversation.status, 'ai', 'Status should be ai');
-  console.log('   ✅ Returned to AI Receptionist mode successfully!\n');
-
-  console.log('🎉 ALL BACKEND API TESTS PASSED SUCCESSFULLY! 🚀');
+async function request(path, options) {
+  return fetch(`${baseUrl}${path}`, { redirect: 'manual', ...options });
 }
 
-runTests().catch(err => {
-  console.error('❌ Test failed with error:', err);
-  process.exit(1);
-});
+async function runTests() {
+  const health = await request('/health');
+  assert.equal(health.status, 200, 'health endpoint should be public');
+
+  const me = await request('/auth/me');
+  assert.equal(me.status, 401, '/auth/me must reject a missing session');
+
+  const protectedBusiness = await request('/business');
+  assert.equal(protectedBusiness.status, 401, 'dashboard business data must require authentication');
+
+  const callback = await request('/auth/google/callback');
+  assert.equal(callback.status, 302, 'OAuth callback route must be registered');
+  assert.equal(callback.headers.get('location'), '/?auth_error=invalid_state', 'missing OAuth state must fail safely');
+
+  const logout = await request('/auth/logout', { method: 'POST' });
+  assert.equal(logout.status, 403, 'logout must reject a request without a CSRF token');
+
+  const webhookVerification = await request('/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=verify-token&hub.challenge=challenge-123');
+  if (process.env.META_VERIFY_TOKEN === 'verify-token') {
+    assert.equal(webhookVerification.status, 200, 'valid Meta webhook verification must succeed');
+    assert.equal(await webhookVerification.text(), 'challenge-123');
+  }
+
+  const webhookPayload = JSON.stringify({ object: 'whatsapp_business_account', entry: [] });
+  const invalidWebhook = await request('/webhooks/whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=bad' }, body: webhookPayload });
+  assert.equal(invalidWebhook.status, 401, 'unsigned or invalid Meta webhook must be rejected');
+
+  if (process.env.META_APP_SECRET === 'test-app-secret') {
+    const signature = crypto.createHmac('sha256', process.env.META_APP_SECRET).update(webhookPayload).digest('hex');
+    const validWebhook = await request('/webhooks/whatsapp', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': `sha256=${signature}` }, body: webhookPayload });
+    assert.equal(validWebhook.status, 200, 'signed Meta webhook must be acknowledged');
+  }
+
+  console.log('Authentication, CSRF, and webhook protection tests passed.');
+}
+
+runTests().catch((error) => { console.error(error); process.exit(1); });

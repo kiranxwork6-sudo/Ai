@@ -1,17 +1,14 @@
 import React from 'react';
-import { 
-  Users, 
-  Bot, 
-  UserCheck, 
-  Radio, 
-  ArrowRight, 
-  Sparkles, 
-  Clock, 
-  MapPin, 
-  Tag, 
-  HelpCircle,
-  CheckCircle,
-  ExternalLink
+import {
+  Users,
+  Bot,
+  UserCheck,
+  Radio,
+  ArrowRight,
+  Sparkles,
+  MessageSquare,
+  Tag,
+  Plus
 } from 'lucide-react';
 
 export default function DashboardOverview({
@@ -24,89 +21,67 @@ export default function DashboardOverview({
   onApplyTemplate
 }) {
   const isConnected = whatsappStatus?.connected;
-  const recentConvs = conversations.slice(0, 4);
+  // Sort by most recent activity first (safety sort)
+  const sortedConvs = [...conversations].sort(
+    (a, b) => new Date(b.lastTimestamp || b.lastMessageAt || 0) - new Date(a.lastTimestamp || a.lastMessageAt || 0)
+  );
+  const recentConvs = sortedConvs.slice(0, 5);
+
+  const totalCount = stats?.total ?? conversations.length ?? 0;
+  const aiHandledCount = stats?.aiHandled ?? conversations.filter(c => c.status === 'AI_ACTIVE' || c.status === 'ai').length ?? 0;
+  const humanHandledCount = stats?.humanHandled ?? conversations.filter(c => ['HUMAN_ACTIVE', 'NEEDS_HUMAN', 'human'].includes(c.status)).length ?? 0;
 
   return (
     <div className="space-y-6">
-      
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold mb-3 border border-emerald-500/30">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            AI Receptionist is Online 24/7
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Welcome back, {business?.name || 'Business Owner'}!
-          </h1>
-          <p className="mt-2 text-slate-300 text-sm sm:text-base leading-relaxed">
-            Your automated receptionist is ready to answer customer inquiries on WhatsApp using your real business hours, pricing, and services.
-          </p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={() => setActiveTab('simulator')}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
-            >
-              <Bot className="w-4 h-4" />
-              Test Receptionist (Simulator)
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all border border-white/10 backdrop-blur"
-            >
-              Edit Business Info & Prices
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Decorative ambient background */}
-        <div className="absolute -right-16 -bottom-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-      </div>
-
-      {/* 4 Metric Cards */}
+      {/* 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         {/* Total Inquiries */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+        <div className="p-5 rounded-2xl border transition-all hover:border-[#00E676]/30" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Inquiries</span>
-            <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6B7280' }}>Total Inquiries</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111A1A', color: '#00E676' }}>
+              <Users className="w-4 h-4" />
             </div>
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900">{stats?.total || 0}</p>
-          <p className="mt-1 text-xs text-slate-500">Customer threads recorded</p>
-        </div>
-
-        {/* AI Resolution Rate */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Autonomous AI</span>
-            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Bot className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-slate-900">
-            {stats?.total ? Math.round(((stats?.aiHandled || 0) / stats.total) * 100) : 100}%
+          <p className="mt-3 text-3xl font-extrabold" style={{ color: '#FFFFFF' }}>{totalCount}</p>
+          <p className="mt-1 text-xs" style={{ color: '#6B7280' }}>
+            {totalCount === 1 ? '1 active customer thread' : `${totalCount} customer threads recorded`}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{stats?.aiHandled || 0} handled completely by AI</p>
         </div>
 
-        {/* Human Takeovers */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+        {/* AI Handled */}
+        <div className="p-5 rounded-2xl border transition-all hover:border-[#00E676]/30" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Human Handoffs</span>
-            <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <UserCheck className="w-5 h-5" />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6B7280' }}>AI Handled</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111A1A', color: '#00E676' }}>
+              <Bot className="w-4 h-4" />
             </div>
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900">{stats?.humanHandled || 0}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {stats?.humanHandled > 0 ? (
-              <span className="text-amber-600 font-semibold cursor-pointer" onClick={() => setActiveTab('inbox')}>
-                Requires attention →
+          <p className="mt-3 text-3xl font-extrabold" style={{ color: '#00E676' }}>
+            {aiHandledCount}
+          </p>
+          <p className="mt-1 text-xs" style={{ color: '#6B7280' }}>
+            {totalCount > 0
+              ? `${Math.round((aiHandledCount / totalCount) * 100)}% resolution rate`
+              : 'No data yet'}
+          </p>
+        </div>
+
+        {/* Human Handoffs */}
+        <div className="p-5 rounded-2xl border transition-all hover:border-[#00E676]/30" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6B7280' }}>Human Handoffs</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111A1A', color: humanHandledCount > 0 ? '#fbbf24' : '#6B7280' }}>
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-3 text-3xl font-extrabold" style={{ color: '#FFFFFF' }}>{humanHandledCount}</p>
+          <p className="mt-1 text-xs" style={{ color: '#6B7280' }}>
+            {humanHandledCount > 0 ? (
+              <span className="cursor-pointer hover:underline text-amber-400" onClick={() => setActiveTab('inbox')}>
+                Requires staff attention →
               </span>
             ) : (
               'All clear — no pending handoffs'
@@ -114,249 +89,212 @@ export default function DashboardOverview({
           </p>
         </div>
 
-        {/* WhatsApp Channel */}
-        <div 
+        {/* WhatsApp Status */}
+        <div
           onClick={onOpenWhatsAppModal}
-          className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+          className="p-5 rounded-2xl border transition-all hover:border-[#00E676]/30 cursor-pointer"
+          style={{ background: '#0D1515', borderColor: '#1C2929' }}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">WhatsApp Status</span>
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isConnected ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-              <Radio className="w-5 h-5" />
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6B7280' }}>WhatsApp Status</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111A1A', color: isConnected ? '#00E676' : '#6B7280' }}>
+              <Radio className="w-4 h-4" />
             </div>
           </div>
-          <p className="mt-3 text-sm font-bold text-slate-900 truncate">
-            {isConnected ? 'Connected (Test Sandbox)' : 'Disconnected'}
-          </p>
-          <p className="mt-1 text-xs text-emerald-600 font-medium group-hover:underline flex items-center gap-1">
-            {whatsappStatus?.phoneNumber || 'Click to configure'}
-            <ExternalLink className="w-3 h-3" />
+          <div className="mt-3 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: isConnected ? '#00E676' : '#6B7280' }} />
+            <p className="text-lg font-bold" style={{ color: '#FFFFFF' }}>
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </p>
+          </div>
+          <p className="mt-1 text-xs" style={{ color: '#6B7280' }}>
+            {isConnected ? 'Test Mode Active' : 'Click to connect'}
           </p>
         </div>
 
       </div>
 
-      {/* 2-Column Section: Setup Wizard & 1-Click Industry Templates */}
+      {/* Main Grid: Left Large (Recent Convs) + Right (Quick Actions / AI Performance) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left 2 Cols: Setup Checklist & Active Business Summary */}
+
+        {/* Left 2 Cols: Recent Conversations */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Onboarding Checklist Card */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-600" />
-              Quick Launch Onboarding Flow
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Verify your setup to start answering customer inquiries automatically.
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {/* Step 1 */}
-              <div 
-                onClick={() => setActiveTab('settings')}
-                className="flex items-start justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 cursor-pointer transition-colors border border-slate-200/60"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                    1
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900">Define Business Info & Knowledge Base</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {business?.name ? `${business.name} (${business.services?.length || 0} services, ${business.faqs?.length || 0} FAQs)` : 'Add your hours, services, prices, and FAQs'}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  Ready
-                </span>
-              </div>
-
-              {/* Step 2 */}
-              <div 
-                onClick={onOpenWhatsAppModal}
-                className="flex items-start justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 cursor-pointer transition-colors border border-slate-200/60"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                    2
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900">Connect WhatsApp Channel</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {isConnected ? `Active on sandbox number: ${whatsappStatus?.phoneNumber}` : 'Connect your WhatsApp test sandbox or Meta API'}
-                    </p>
-                  </div>
-                </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
-                  isConnected ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'
-                }`}>
-                  {isConnected ? 'Connected' : 'Action Needed'}
-                </span>
-              </div>
-
-              {/* Step 3 */}
-              <div 
-                onClick={() => setActiveTab('simulator')}
-                className="flex items-start justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100/80 cursor-pointer transition-colors border border-slate-200/60"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold mt-0.5">
-                    3
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900">Simulate Real Customer Inquiries</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Try asking about your hours, prices, or test the human handoff feature.
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
-                  Try Now →
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Inquiries List */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-5 sm:p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
+          <div className="rounded-2xl border p-6" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Recent Customer Activity</h2>
-                <p className="text-xs text-slate-500">Live conversations from WhatsApp</p>
+                <h2 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>Recent Conversations</h2>
+                <p className="text-xs mt-0.5" style={{ color: '#6B7280' }}>
+                  {totalCount > 0 ? `${totalCount} customer thread${totalCount === 1 ? '' : 's'}` : 'No active inquiries'}
+                </p>
               </div>
-              <button
-                onClick={() => setActiveTab('inbox')}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-              >
-                View all in Inbox →
-              </button>
+              {totalCount > 0 && (
+                <button
+                  onClick={() => setActiveTab('inbox')}
+                  className="text-xs font-bold transition-colors hover:underline"
+                  style={{ color: '#00E676' }}
+                >
+                  View all in Conversations →
+                </button>
+              )}
             </div>
 
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y" style={{ borderColor: '#1C2929' }}>
               {recentConvs.length === 0 ? (
-                <div className="py-8 text-center text-slate-400 text-xs">
-                  No customer conversations yet. Use the Simulator tab to start one!
+                <div className="py-12 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#111A1A', color: '#6B7280' }}>
+                    <MessageSquare className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm font-semibold mb-1" style={{ color: '#FFFFFF' }}>No conversations yet</p>
+                  <p className="text-xs max-w-sm mb-5" style={{ color: '#6B7280' }}>
+                    When customers message your WhatsApp number, conversations will appear here automatically.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('simulator')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all hover:brightness-110 active:scale-95"
+                    style={{ background: '#00E676', color: '#080F0F' }}
+                  >
+                    <Bot className="w-4 h-4" />
+                    Test AI Receptionist
+                  </button>
                 </div>
               ) : (
-                recentConvs.map((conv) => (
-                  <div 
-                    key={conv.id}
-                    onClick={() => setActiveTab('inbox')}
-                    className="py-3 flex items-center justify-between hover:bg-slate-50 px-2 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
-                        {conv.customerName ? conv.customerName.slice(0, 1).toUpperCase() : 'C'}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900">{conv.customerName}</span>
-                          <span className="text-[10px] text-slate-400">{conv.customerPhone}</span>
+                recentConvs.map((conv) => {
+                  const isHuman = ['HUMAN_ACTIVE', 'NEEDS_HUMAN', 'human'].includes(conv.status);
+                  return (
+                    <div
+                      key={conv.id}
+                      onClick={() => setActiveTab('inbox')}
+                      className="py-3.5 flex items-center justify-between px-3 rounded-xl cursor-pointer transition-colors hover:bg-[#111A1A]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ background: '#111A1A', color: isHuman ? '#fbbf24' : '#00E676' }}>
+                          {conv.customerName ? conv.customerName.slice(0, 1).toUpperCase() : 'C'}
                         </div>
-                        <p className="text-xs text-slate-500 truncate max-w-xs sm:max-w-md mt-0.5">
-                          {conv.lastMessage || 'No messages yet'}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold truncate" style={{ color: '#FFFFFF' }}>{conv.customerName}</span>
+                            <span className="text-xs font-mono" style={{ color: '#6B7280' }}>{conv.customerPhone}</span>
+                          </div>
+                          <p className="text-xs truncate max-w-xs sm:max-w-md mt-0.5" style={{ color: '#E5E7EB' }}>
+                            {conv.lastMessage || 'No messages yet'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full border" style={{
+                          background: isHuman ? 'rgba(251, 191, 36, 0.1)' : 'rgba(0, 230, 118, 0.1)',
+                          borderColor: isHuman ? 'rgba(251, 191, 36, 0.3)' : 'rgba(0, 230, 118, 0.3)',
+                          color: isHuman ? '#fbbf24' : '#00E676'
+                        }}>
+                          {isHuman ? 'Human' : 'AI'}
+                        </span>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
-                        conv.status === 'human'
-                          ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}>
-                        {conv.status === 'human' ? 'Staff Takeover' : 'AI Active'}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
-
         </div>
 
-        {/* Right 1 Col: Quick Industry Template Loader */}
+        {/* Right 1 Col: Quick Actions & Templates */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-emerald-700 mb-2">
-              <Sparkles className="w-5 h-5" />
-              <h2 className="text-sm font-extrabold text-slate-900">1-Click Industry Templates</h2>
+
+          {/* Quick Actions */}
+          <div className="rounded-2xl border p-6" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+            <h2 className="text-base font-bold mb-4" style={{ color: '#FFFFFF' }}>Quick Actions</h2>
+            <div className="space-y-2">
+              <button
+                onClick={() => setActiveTab('simulator')}
+                className="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
+              >
+                <div className="flex items-center gap-3">
+                  <Bot className="w-4 h-4" style={{ color: '#00E676' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#FFFFFF' }}>Test AI Receptionist</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" style={{ color: '#6B7280' }} />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('inbox')}
+                className="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
+              >
+                <div className="flex items-center gap-3">
+                  <Users className="w-4 h-4" style={{ color: '#00E676' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#FFFFFF' }}>View Conversations</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" style={{ color: '#6B7280' }} />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('business')}
+                className="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
+              >
+                <div className="flex items-center gap-3">
+                  <Tag className="w-4 h-4" style={{ color: '#00E676' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#FFFFFF' }}>Update Business Info</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" style={{ color: '#6B7280' }} />
+              </button>
+
+              <button
+                onClick={onOpenWhatsAppModal}
+                className="w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
+              >
+                <div className="flex items-center gap-3">
+                  <Radio className="w-4 h-4" style={{ color: '#00E676' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#FFFFFF' }}>Connect WhatsApp</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" style={{ color: '#6B7280' }} />
+              </button>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Test instantly with real-world small business profiles, operating hours, service catalogs, and FAQs.
+          </div>
+
+          {/* Industry Templates */}
+          <div className="rounded-2xl border p-6" style={{ background: '#0D1515', borderColor: '#1C2929' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-4 h-4" style={{ color: '#00E676' }} />
+              <h2 className="text-base font-bold" style={{ color: '#FFFFFF' }}>Industry Templates</h2>
+            </div>
+            <p className="text-xs leading-relaxed mb-4" style={{ color: '#6B7280' }}>
+              Load realistic small business profiles with hours, services, and FAQs.
             </p>
 
-            <div className="mt-4 space-y-2.5">
+            <div className="space-y-2">
               <button
                 onClick={() => onApplyTemplate('spa')}
-                className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all group"
+                className="w-full text-left p-3 rounded-xl border transition-all hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 group-hover:text-emerald-800">
-                    💆 Glow & Co. Day Spa
-                  </span>
-                  <span className="text-[10px] text-slate-400">Massage & Facials</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">4 Services, $95-$130 pricing, cancellation & couples FAQs</p>
+                <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>💆 Day Spa & Wellness</p>
+                <p className="text-[11px] mt-1" style={{ color: '#6B7280' }}>Massage, facials, cancellation FAQs</p>
               </button>
 
               <button
                 onClick={() => onApplyTemplate('dental')}
-                className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all group"
+                className="w-full text-left p-3 rounded-xl border transition-all hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 group-hover:text-emerald-800">
-                    🦷 BrightSmile Dental
-                  </span>
-                  <span className="text-[10px] text-slate-400">Family Clinic</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Cleaning, whitening, insurance acceptance, emergency care</p>
+                <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>🦷 Dental Clinic</p>
+                <p className="text-[11px] mt-1" style={{ color: '#6B7280' }}>Cleaning, whitening, insurance FAQs</p>
               </button>
 
               <button
                 onClick={() => onApplyTemplate('auto')}
-                className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all group"
+                className="w-full text-left p-3 rounded-xl border transition-all hover:border-[#00E676]/30"
+                style={{ background: '#111A1A', borderColor: '#1C2929' }}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 group-hover:text-emerald-800">
-                    🚗 Apex Auto Care
-                  </span>
-                  <span className="text-[10px] text-slate-400">Repair & Service</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Oil change, brakes, repair warranty, shuttle & night-drop box</p>
+                <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>🚗 Auto Care</p>
+                <p className="text-[11px] mt-1" style={{ color: '#6B7280' }}>Oil change, brakes, warranty info</p>
               </button>
             </div>
           </div>
 
-          {/* Quick Business Card Preview */}
-          <div className="bg-slate-900 text-slate-200 rounded-xl p-5 shadow-sm text-xs space-y-3">
-            <h3 className="font-bold text-white text-sm flex items-center justify-between">
-              <span>Active Business Card</span>
-              <span className="text-[10px] font-normal text-emerald-400">Live in AI Engine</span>
-            </h3>
-            <div className="space-y-2 border-t border-slate-800 pt-3">
-              <div className="flex items-start gap-2">
-                <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span className="truncate">{business?.address || 'Address not configured'}</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span>Mon-Fri: 9:00 AM - 7:00 PM (typical)</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <Tag className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span>{business?.services?.length || 0} active services in price sheet</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <HelpCircle className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-                <span>{business?.faqs?.length || 0} automated FAQ answers</span>
-              </div>
-            </div>
-          </div>
         </div>
 
       </div>

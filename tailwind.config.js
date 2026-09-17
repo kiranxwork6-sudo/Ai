@@ -14,6 +14,13 @@ export default {
           600: '#16a34a',
           700: '#15803d',
         },
+        gereply: {
+          bg: '#080F0F',
+          primary: '#00E676',
+          secondary: '#00C56A',
+          card: '#111919',
+          cardBorder: '#1a2626',
+        },
         whatsapp: {
           DEFAULT: '#25D366',
           dark: '#128C7E',

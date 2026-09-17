@@ -3,102 +3,94 @@ import crypto from 'crypto';
 /**
  * Official WhatsApp Business Cloud API Provider (Meta Graph API v21.0)
  * 
- * Production Documentation & Setup Requirements:
- * 1. Meta Developer App: Create a "Business" type app at https://developers.facebook.com
- * 2. Add WhatsApp product to the app.
- * 3. Add or migrate a phone number in Meta WhatsApp Manager.
- * 4. Generate a permanent System User Token with permissions:
- *    - whatsapp_business_messaging
- *    - whatsapp_business_management
- * 5. Configure Webhooks:
- *    - Callback URL: https://yourdomain.com/api/whatsapp/webhook
- *    - Verify Token: Matches WHATSAPP_VERIFY_TOKEN
- *    - Subscribe to fields: 'messages'
+ * Supports multi-tenant token resolution and verification against Meta Graph API.
+ * Never leaks raw access tokens to client-side logs or UI responses.
  */
 export class MetaWhatsAppProvider {
   constructor() {
     this.name = 'meta';
     this.isMock = false;
     this.apiUrl = 'https://graph.facebook.com/v21.0';
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    this.apiToken = process.env.WHATSAPP_API_TOKEN;
-    this.verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
-    this.appSecret = process.env.WHATSAPP_APP_SECRET;
-  }
-
-  isConfigured() {
-    return Boolean(this.phoneNumberId && this.apiToken);
-  }
-
-  async getStatus(currentDbStatus) {
-    const configured = this.isConfigured();
-    return {
-      connected: configured && (currentDbStatus?.connected ?? true),
-      mode: 'meta',
-      provider: 'Meta WhatsApp Business Cloud API',
-      phoneNumber: currentDbStatus?.phoneNumber || 'Configured via Meta Business Account',
-      phoneNumberId: this.phoneNumberId || 'Missing WHATSAPP_PHONE_NUMBER_ID',
-      statusMessage: configured 
-        ? 'Connected to Official Meta WhatsApp Cloud API' 
-        : 'Meta credentials incomplete. Check .env configuration.',
-      isMock: false,
-      notes: 'Operating with live Meta Graph API.'
-    };
-  }
-
-  async connect(options = {}) {
-    if (!this.isConfigured()) {
-      throw new Error(
-        'Cannot connect to official WhatsApp API: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_API_TOKEN is missing in environment variables.'
-      );
-    }
-
-    // Optional: Make a test call to Meta Graph API to verify credentials
-    // GET https://graph.facebook.com/v21.0/{phone_number_id}
-    try {
-      const response = await fetch(`${this.apiUrl}/${this.phoneNumberId}`, {
-        headers: {
-          'Authorization': `Bearer ${this.apiToken}`
-        }
-      });
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(`Meta API Error: ${data.error.message}`);
-      }
-
-      return {
-        success: true,
-        connected: true,
-        mode: 'meta',
-        phoneNumber: data.display_phone_number || options.phoneNumber,
-        connectedAt: new Date().toISOString(),
-        statusMessage: 'Connected to Meta WhatsApp Cloud API',
-        isMock: false
-      };
-    } catch (err) {
-      throw new Error(`Failed to verify Meta WhatsApp credentials: ${err.message}`);
-    }
-  }
-
-  async disconnect() {
-    return {
-      success: true,
-      connected: false,
-      mode: 'meta',
-      statusMessage: 'Disconnected Meta WhatsApp Cloud API',
-      isMock: false
-    };
+    this.verifyToken = process.env.META_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN;
+    this.appSecret = process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET;
   }
 
   /**
-   * Send a standard text message via Meta Graph API v21.0
-   * 
-   * @param {string} to - Customer E.164 phone number without '+' (e.g. "15551234567")
-   * @param {string} text - Message body
+   * Safely mask an access token for display in the UI without exposing secrets.
+   * e.g. "EAAG...1234"
    */
-  async sendMessage(to, text) {
-    if (!this.isConfigured()) {
-      throw new Error('Meta WhatsApp Cloud API credentials not configured.');
+  maskToken(token) {
+    if (!token || typeof token !== 'string') return '';
+    if (token.length <= 10) return '••••••••';
+    return `${token.slice(0, 4)}...${token.slice(-4)}`;
+  }
+
+  /**
+   * Validates Meta credentials against the official Meta Graph API.
+   * Only returns success if Meta actively confirms the phone number ID and token.
+   * 
+   * @param {Object} params
+   * @param {string} params.phoneNumberId - Meta Phone Number ID
+   * @param {string} params.accessToken - System User or User Access Token
+   */
+  async verifyCredentials({ phoneNumberId, accessToken }) {
+    if (!phoneNumberId || !phoneNumberId.trim()) {
+      return { valid: false, error: 'Phone Number ID is required.' };
+    }
+    if (!accessToken || !accessToken.trim()) {
+      return { valid: false, error: 'Meta Access Token is required.' };
+    }
+
+    const cleanPhoneId = phoneNumberId.trim();
+    const cleanToken = accessToken.trim();
+
+    try {
+      // Query Meta Graph API for phone number details
+      const url = `${this.apiUrl}/${cleanPhoneId}?fields=verified_name,display_phone_number,quality_rating,code_verification_status`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        const errorMsg = data.error ? data.error.message : response.statusText;
+        return {
+          valid: false,
+          error: `Meta Graph API rejected credentials: ${errorMsg}`
+        };
+      }
+
+      return {
+        valid: true,
+        displayPhoneNumber: data.display_phone_number || 'Registered WhatsApp Number',
+        verifiedName: data.verified_name || '',
+        qualityRating: data.quality_rating || 'UNKNOWN',
+        phoneNumberId: cleanPhoneId
+      };
+    } catch (err) {
+      return {
+        valid: false,
+        error: `Network error connecting to Meta Graph API: ${err.message}`
+      };
+    }
+  }
+
+  /**
+   * Send an outgoing text message via Meta Graph API v21.0
+   * 
+   * @param {Object} params
+   * @param {string} params.phoneNumberId - Verified Meta Phone Number ID
+   * @param {string} params.accessToken - Meta Access Token
+   * @param {string} params.to - Customer E.164 phone number
+   * @param {string} params.text - Message content
+   */
+  async sendMessage({ phoneNumberId, accessToken, to, text }) {
+    if (!phoneNumberId || !accessToken) {
+      throw new Error('Missing Meta credentials for message delivery.');
     }
 
     const cleanTo = to.replace(/[^0-9]/g, '');
@@ -114,29 +106,27 @@ export class MetaWhatsAppProvider {
       }
     };
 
-    // TODO: In production, handle 24-hour messaging window rules.
-    // If >24 hours since customer's last message, a pre-approved WhatsApp Template Message must be used instead.
-
-    const response = await fetch(`${this.apiUrl}/${this.phoneNumberId}/messages`, {
+    const response = await fetch(`${this.apiUrl}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiToken}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
 
     const result = await response.json();
+
     if (!response.ok || result.error) {
       const errorMsg = result.error ? result.error.message : response.statusText;
-      console.error('[MetaWhatsAppProvider] Send failed:', result);
+      console.error(`[MetaWhatsApp] Failed to send to ${cleanTo}:`, result.error?.message || response.statusText);
       throw new Error(`Meta WhatsApp send failed: ${errorMsg}`);
     }
 
     return {
       success: true,
       provider: 'meta',
-      messageId: result.messages?.[0]?.id || `meta_${Date.now()}`,
+      messageId: result.messages?.[0]?.id || `wamid_meta_${Date.now()}`,
       to: cleanTo,
       text,
       status: 'sent',
@@ -145,7 +135,7 @@ export class MetaWhatsAppProvider {
   }
 
   /**
-   * Verify Webhook GET request from Meta
+   * Verify Webhook GET request handshake from Meta
    */
   verifyWebhookChallenge(mode, token, challenge) {
     if (mode === 'subscribe' && token === this.verifyToken) {
@@ -157,34 +147,65 @@ export class MetaWhatsAppProvider {
   /**
    * Verify HMAC-SHA256 signature from Meta webhook POST request
    */
-  validateSignature(rawBody, signatureHeader) {
-    if (!this.appSecret || !signatureHeader) return true; // Skip if no secret set
-    
-    const signature = signatureHeader.replace('sha256=', '');
-    const expected = crypto
-      .createHmac('sha256', this.appSecret)
-      .update(rawBody)
-      .digest('hex');
+  validateSignature(rawBody, signatureHeader, customAppSecret = null) {
+    const secret = customAppSecret || this.appSecret;
+    // Production must never accept unsigned events. Development can opt in explicitly.
+    if (!secret) return process.env.NODE_ENV !== 'production' && process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true';
+    if (!signatureHeader || !rawBody) return false;
 
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    try {
+      const signature = signatureHeader.replace('sha256=', '');
+      const expected = crypto
+        .createHmac('sha256', secret)
+        .update(rawBody)
+        .digest('hex');
+
+      return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+    } catch (err) {
+      console.error('[MetaWebhook] Signature validation failed:', err.message);
+      return false;
+    }
+  }
+
+  isValidWebhookPayload(body) {
+    return Boolean(body && body.object === 'whatsapp_business_account' && Array.isArray(body.entry));
+  }
+
+  getWebhookEvents(body) {
+    const events = [];
+    for (const entry of body.entry || []) for (const change of entry.changes || []) {
+      if (change.field !== 'messages' || !change.value?.metadata?.phone_number_id) continue;
+      const value = change.value;
+      const metadata = value.metadata;
+      for (const message of value.messages || []) {
+        events.push({ kind: 'message', phoneNumberId: String(metadata.phone_number_id), whatsAppAccountId: String(entry.id || ''), fromPhone: `+${String(message.from || '').replace(/\D/g, '')}`, customerName: value.contacts?.find((c) => c.wa_id === message.from)?.profile?.name || '', text: message.type === 'text' ? String(message.text?.body || '').trim() : '', messageId: message.id, messageType: message.type || 'unknown' });
+      }
+      for (const status of value.statuses || []) events.push({ kind: 'status', phoneNumberId: String(metadata.phone_number_id), messageId: status.id, status: status.status, errorCode: status.errors?.[0]?.code });
+    }
+    return events;
   }
 
   /**
    * Parse incoming webhook payload from Meta
+   * Extracts phoneNumberId, sender phone, name, and text.
    */
   parseWebhook(body) {
     try {
       const entry = body.entry?.[0];
       const change = entry?.changes?.[0];
       const value = change?.value;
+      const metadata = value?.metadata;
       const message = value?.messages?.[0];
       const contact = value?.contacts?.[0];
 
       if (!message || message.type !== 'text') {
-        return null; // Ignore statuses or non-text for basic MVP
+        // Return null for read receipts, status events, or unsupported media in basic MVP
+        return null;
       }
 
       return {
+        phoneNumberId: metadata?.phone_number_id || '',
+        displayPhoneNumber: metadata?.display_phone_number || '',
         fromPhone: '+' + message.from,
         customerName: contact?.profile?.name || `Customer (${message.from.slice(-4)})`,
         text: message.text?.body || '',
@@ -192,8 +213,10 @@ export class MetaWhatsAppProvider {
         timestamp: new Date(Number(message.timestamp) * 1000).toISOString()
       };
     } catch (err) {
-      console.error('[MetaWhatsAppProvider] Error parsing incoming webhook:', err);
+      console.error('[MetaWebhook] Error parsing payload:', err);
       return null;
     }
   }
 }
+
+export const metaWhatsAppProvider = new MetaWhatsAppProvider();

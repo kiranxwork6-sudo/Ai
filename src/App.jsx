@@ -1,281 +1,76 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import Navbar from './components/Navbar.jsx';
-import DashboardOverview from './components/DashboardOverview.jsx';
-import BusinessSettings from './components/BusinessSettings.jsx';
-import Inbox from './components/Inbox.jsx';
-import CustomerSimulator from './components/CustomerSimulator.jsx';
-import WhatsAppConnectModal from './components/WhatsAppConnectModal.jsx';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import LandingPage from './components/LandingPage.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import { apiFetch } from './lib/api.js';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'inbox' | 'settings' | 'simulator'
-  const [business, setBusiness] = useState(null);
-  const [whatsappStatus, setWhatsappStatus] = useState(null);
-  const [conversations, setConversations] = useState([]);
-  const [stats, setStats] = useState({ total: 0, unread: 0, aiHandled: 0, humanHandled: 0 });
-  const [activeConvId, setActiveConvId] = useState(null);
-  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Fetch initial data
-  const fetchData = useCallback(async () => {
-    try {
-      const [bizRes, waRes, convsRes] = await Promise.all([
-        fetch('/api/business').then(r => r.json()),
-        fetch('/api/whatsapp/status').then(r => r.json()),
-        fetch('/api/conversations').then(r => r.json())
-      ]);
-
-      if (bizRes.success) setBusiness(bizRes.business);
-      if (waRes.success) setWhatsappStatus(waRes.status);
-      if (convsRes.success) {
-        setConversations(convsRes.conversations);
-        setStats(convsRes.stats);
-        if (!activeConvId && convsRes.conversations.length > 0) {
-          setActiveConvId(convsRes.conversations[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeConvId]);
+function AuthGuard({ children }) {
+  const [user, setUser] = useState(undefined);
+  const [csrfToken, setCsrfToken] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchData();
-    // Poll for conversation updates every 3 seconds to reflect customer messages in real-time
-    const interval = setInterval(async () => {
-      try {
-        const convsRes = await fetch('/api/conversations').then(r => r.json());
-        if (convsRes.success) {
-          setConversations(convsRes.conversations);
-          setStats(convsRes.stats);
-        }
-      } catch (e) {
-        // silent poll error
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  // Business Save Handler
-  const handleSaveBusiness = async (updatedData) => {
-    const res = await fetch('/api/business', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedData)
-    });
-    const data = await res.json();
-    if (data.success) {
-      setBusiness(data.business);
-    } else {
-      throw new Error(data.error || 'Failed to update business');
-    }
-  };
-
-  // 1-Click Industry Template Handler
-  const handleApplyTemplate = async (templateType) => {
-    try {
-      const res = await fetch(`/api/business/template/${templateType}`, {
-        method: 'POST'
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBusiness(data.business);
-        alert(`Loaded "${data.business.name}" template successfully! AI knowledge base updated.`);
-      }
-    } catch (err) {
-      alert('Failed to load template: ' + err.message);
-    }
-  };
-
-  // WhatsApp Connect / Disconnect Handlers
-  const handleConnectWhatsApp = async (phoneNumber) => {
-    const res = await fetch('/api/whatsapp/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phoneNumber })
-    });
-    const data = await res.json();
-    if (data.success) {
-      setWhatsappStatus(prev => ({
-        ...prev,
-        connected: true,
-        phoneNumber: data.result.phoneNumber,
-        statusMessage: data.result.statusMessage
-      }));
-    } else {
-      throw new Error(data.error);
-    }
-  };
-
-  const handleDisconnectWhatsApp = async () => {
-    const res = await fetch('/api/whatsapp/disconnect', {
-      method: 'POST'
-    });
-    const data = await res.json();
-    if (data.success) {
-      setWhatsappStatus(prev => ({
-        ...prev,
-        connected: false,
-        statusMessage: data.result.statusMessage
-      }));
-    } else {
-      throw new Error(data.error);
-    }
-  };
-
-  // Staff Human Reply
-  const handleSendHumanReply = async (convId, text) => {
-    const res = await fetch(`/api/conversations/${convId}/reply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    const data = await res.json();
-    if (data.success) {
-      setConversations(prev =>
-        prev.map(c => (c.id === convId ? data.conversation : c))
-      );
-    } else {
-      throw new Error(data.error);
-    }
-  };
-
-  // Toggle Human Handoff Mode
-  const handleToggleHandoff = async (convId, status) => {
-    const res = await fetch(`/api/conversations/${convId}/handoff`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
-    const data = await res.json();
-    if (data.success) {
-      setConversations(prev =>
-        prev.map(c => (c.id === convId ? data.conversation : c))
-      );
-      setStats(prev => ({
-        ...prev,
-        humanHandled: status === 'human' ? prev.humanHandled + 1 : Math.max(0, prev.humanHandled - 1),
-        aiHandled: status === 'ai' ? prev.aiHandled + 1 : Math.max(0, prev.aiHandled - 1)
-      }));
-    } else {
-      throw new Error(data.error);
-    }
-  };
-
-  // Customer Simulator Message Trigger
-  const handleSimulateMessage = async ({ customerPhone, customerName, message }) => {
-    const res = await fetch('/api/simulate/message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customerPhone, customerName, message })
-    });
-    const data = await res.json();
-    if (data.success) {
-      // Update local state with latest conversation
-      setConversations(prev => {
-        const index = prev.findIndex(c => c.id === data.conversation.id);
-        if (index >= 0) {
-          const updated = [...prev];
-          updated[index] = data.conversation;
-          return updated;
+    apiFetch('/api/auth/me')
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (data?.success) {
+          setUser(data.user);
+          setCsrfToken(data.csrfToken);
         } else {
-          return [data.conversation, ...prev];
+          setUser(null);
         }
-      });
-      return data;
-    } else {
-      throw new Error(data.error);
-    }
+      })
+      .catch(() => setUser(null));
+  }, []);
+
+  const handleLogout = () => {
+    setUser(null);
+    setCsrfToken(null);
+    navigate('/');
   };
 
-  if (isLoading) {
+  // Still checking auth
+  if (user === undefined) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-600 animate-pulse flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/30">
-          AI
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: '#080F0F' }}>
+        <div className="w-12 h-12 rounded-2xl bg-[#00E676] animate-pulse flex items-center justify-center text-[#080F0F] font-bold text-xl shadow-lg">
+          G
         </div>
-        <p className="mt-4 text-xs font-bold text-slate-600">Starting AI Receptionist Platform...</p>
+        <p className="mt-4 text-xs font-bold" style={{ color: '#6B7280' }}>Loading...</p>
       </div>
     );
   }
 
+  return children({ user, csrfToken, onLogout: handleLogout });
+}
+
+function LoginRoute({ user }) {
+  // Authenticated user visiting /login → redirect to /dashboard
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <LoginPage />;
+}
+
+function DashboardRoute({ user, csrfToken, onLogout }) {
+  // Unauthenticated user → redirect to /login
+  if (!user) return <Navigate to="/login" replace />;
+  return <Dashboard user={user} csrfToken={csrfToken} onLogout={onLogout} />;
+}
+
+export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/80">
-      
-      {/* Navigation Bar */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        business={business}
-        whatsappStatus={whatsappStatus}
-        onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-        unreadCount={stats.unread}
-      />
-
-      {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'dashboard' && (
-          <DashboardOverview
-            business={business}
-            whatsappStatus={whatsappStatus}
-            conversations={conversations}
-            stats={stats}
-            setActiveTab={setActiveTab}
-            onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-            onApplyTemplate={handleApplyTemplate}
-          />
+    <BrowserRouter>
+      <AuthGuard>
+        {({ user, csrfToken, onLogout }) => (
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginRoute user={user} />} />
+            <Route path="/dashboard" element={<DashboardRoute user={user} csrfToken={csrfToken} onLogout={onLogout} />} />
+            {/* Catch-all: send unknown routes to landing */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         )}
-
-        {activeTab === 'inbox' && (
-          <Inbox
-            conversations={conversations}
-            activeConvId={activeConvId}
-            onSelectConversation={(id) => setActiveConvId(id)}
-            onSendHumanReply={handleSendHumanReply}
-            onToggleHandoff={handleToggleHandoff}
-            business={business}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <BusinessSettings
-            initialBusiness={business}
-            onSave={handleSaveBusiness}
-            onApplyTemplate={handleApplyTemplate}
-          />
-        )}
-
-        {activeTab === 'simulator' && (
-          <CustomerSimulator
-            business={business}
-            whatsappStatus={whatsappStatus}
-            onSimulateMessage={handleSimulateMessage}
-            conversations={conversations}
-            onOpenInbox={(convId) => {
-              setActiveConvId(convId);
-              setActiveTab('inbox');
-            }}
-          />
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200/80 bg-white py-4 text-center text-xs text-slate-500">
-        <p>AI Receptionist MVP • Built for non-technical small businesses • WhatsApp Cloud API Ready</p>
-      </footer>
-
-      {/* Connect WhatsApp Modal */}
-      <WhatsAppConnectModal
-        isOpen={isWhatsAppModalOpen}
-        onClose={() => setIsWhatsAppModalOpen(false)}
-        status={whatsappStatus}
-        onConnect={handleConnectWhatsApp}
-        onDisconnect={handleDisconnectWhatsApp}
-      />
-
-    </div>
+      </AuthGuard>
+    </BrowserRouter>
   );
 }

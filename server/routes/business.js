@@ -1,7 +1,13 @@
 import express from 'express';
 import { db } from '../storage/db.js';
+import { requireRole } from '../auth.js';
+import { normalizeBusinessHours } from '../services/businessHours.js';
 
 const router = express.Router();
+
+function getBusinessId(req) {
+  return req.auth.businessId;
+}
 
 // Business Profile Templates for quick onboarding / demos
 const templates = {
@@ -17,7 +23,7 @@ const templates = {
       { day: "Wednesday", open: "09:00 AM", close: "07:00 PM", closed: false },
       { day: "Thursday", open: "09:00 AM", close: "07:00 PM", closed: false },
       { day: "Friday", open: "09:00 AM", close: "07:00 PM", closed: false },
-      { day: "Saturday", open: "10:00 AM", close: "06:00 PM", closed: false },
+      { day: "Saturday", open: "10:00 AM", close: "05:00 PM", closed: false },
       { day: "Sunday", open: "Closed", close: "Closed", closed: true }
     ],
     services: [
@@ -91,23 +97,48 @@ const templates = {
 
 // GET /api/business
 router.get('/', (req, res) => {
-  const business = db.getBusiness();
+  const businessId = getBusinessId(req);
+  const business = db.getBusiness(businessId);
   res.json({ success: true, business });
 });
 
+router.get('/hours', (req, res) => {
+  const hours = db.getBusinessHours(getBusinessId(req));
+  if (!hours) return res.status(404).json({ success: false, error: 'Business not found.' });
+  res.json({ success: true, ...hours });
+});
+
+router.put('/hours', requireRole('OWNER'), (req, res) => {
+  try {
+    const openingHours = normalizeBusinessHours(req.body?.openingHours);
+    const timezone = String(req.body?.timezone || 'Asia/Kolkata').trim();
+    try { Intl.DateTimeFormat(undefined, { timeZone: timezone }); } catch { return res.status(400).json({ success: false, error: 'Please choose a valid IANA timezone.' }); }
+    const saved = db.saveBusinessHours(getBusinessId(req), { openingHours, timezone });
+    if (!saved) return res.status(404).json({ success: false, error: 'Business not found.' });
+    res.json({ success: true, ...saved, message: 'Business hours saved successfully.' });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 // PUT /api/business
-router.put('/', (req, res) => {
+router.put('/', requireRole('OWNER'), (req, res) => {
+  const businessId = getBusinessId(req);
   const updates = req.body;
   if (!updates || typeof updates !== 'object') {
     return res.status(400).json({ success: false, error: 'Invalid payload' });
   }
+  if (Object.hasOwn(updates, 'openingHours') || Object.hasOwn(updates, 'timezone')) {
+    return res.status(400).json({ success: false, error: 'Use PUT /api/business/hours to update business hours and timezone.' });
+  }
 
-  const updated = db.updateBusiness(updates);
+  const updated = db.updateBusiness(businessId, updates);
   res.json({ success: true, business: updated });
 });
 
 // POST /api/business/template/:type
-router.post('/template/:type', (req, res) => {
+router.post('/template/:type', requireRole('OWNER'), (req, res) => {
+  const businessId = getBusinessId(req);
   const { type } = req.params;
   const template = templates[type];
   if (!template) {
@@ -117,7 +148,7 @@ router.post('/template/:type', (req, res) => {
     });
   }
 
-  const updated = db.updateBusiness(template);
+  const updated = db.updateBusiness(businessId, template);
   res.json({ success: true, business: updated, templateName: type });
 });
 

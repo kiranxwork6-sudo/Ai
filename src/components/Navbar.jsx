@@ -1,22 +1,24 @@
 import React from 'react';
-import { 
-  Bot, 
-  MessageSquare, 
-  Settings, 
-  Smartphone, 
-  LayoutDashboard, 
-  Radio, 
-  CheckCircle2, 
-  AlertCircle 
+import { Link } from 'react-router-dom';
+import {
+  Bot,
+  MessageSquare,
+  Settings,
+  Smartphone,
+  LayoutDashboard,
+  Radio,
+  LogOut
 } from 'lucide-react';
 
-export default function Navbar({ 
-  activeTab, 
-  setActiveTab, 
-  business, 
-  whatsappStatus, 
+export default function Navbar({
+  activeTab,
+  setActiveTab,
+  business,
+  whatsappStatus,
   onOpenWhatsAppModal,
-  unreadCount = 0
+  unreadCount = 0,
+  user,
+  onLogout
 }) {
   const isConnected = whatsappStatus?.connected;
 
@@ -24,21 +26,25 @@ export default function Navbar({
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
-          {/* Logo & Business Brand */}
+
+          {/* Logo & Business Brand — links to / */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-              <Bot className="w-6 h-6" />
-            </div>
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <Bot className="w-6 h-6" />
+              </div>
+            </Link>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 tracking-tight text-lg">AI Receptionist</span>
+                <Link to="/" className="font-extrabold text-slate-900 tracking-tight text-lg hover:text-emerald-600 transition-colors">
+                  Gereply
+                </Link>
                 <span className="hidden sm:inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  MVP
+                  Dashboard
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs">
-                {business?.name || 'My Small Business'}
+                {business?.name || 'My Business'}
               </p>
             </div>
           </div>
@@ -99,10 +105,10 @@ export default function Navbar({
             </button>
           </nav>
 
-          {/* Right Actions: WhatsApp Status & Connect Button */}
+          {/* Right Actions: WhatsApp Status & Connect Button & User/Logout */}
           <div className="flex items-center gap-3">
             {/* Status Pill */}
-            <div 
+            <div
               onClick={onOpenWhatsAppModal}
               className={`cursor-pointer hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                 isConnected
@@ -129,6 +135,18 @@ export default function Navbar({
               <Radio className="w-3.5 h-3.5" />
               {isConnected ? 'WhatsApp Settings' : 'Connect WhatsApp'}
             </button>
+
+            {/* Logout button */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            )}
           </div>
 
         </div>
