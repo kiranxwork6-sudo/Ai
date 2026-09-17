@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import Navbar from './components/Navbar.jsx';
 import DashboardOverview from './components/DashboardOverview.jsx';
 import BusinessSettings from './components/BusinessSettings.jsx';
@@ -275,6 +276,9 @@ export default function App() {
         onConnect={handleConnectWhatsApp}
         onDisconnect={handleDisconnectWhatsApp}
       />
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
 
     </div>
   );
