@@ -56,6 +56,126 @@ class WhatsAppService {
   }
 
   /**
+   * Exchange Meta Embedded Signup authorization code for access token
+   * This implements the OAuth 2.0 authorization code exchange flow for Meta's Embedded Signup
+   */
+  async exchangeEmbeddedSignupCode(businessId = "biz-default", { code, wabaId, phoneNumberId }) {
+    const META_APP_ID = process.env.META_APP_ID || '230831096602291';
+    const META_APP_SECRET = process.env.META_APP_SECRET;
+    const META_GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || 'v21.0';
+    const REDIRECT_URI = process.env.META_EMBEDDED_SIGNUP_REDIRECT_URI || 'https://gereply.vercel.app';
+
+    if (!META_APP_SECRET) {
+      throw new Error('META_APP_SECRET is not configured. Cannot exchange authorization code.');
+    }
+
+    try {
+      // Step 1: Exchange authorization code for access token
+      const tokenUrl = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/oauth/access_token`;
+      const tokenParams = new URLSearchParams({
+        client_id: META_APP_ID,
+        client_secret: META_APP_SECRET,
+        code: code,
+        redirect_uri: REDIRECT_URI
+      });
+
+      const tokenResponse = await fetch(`${tokenUrl}?${tokenParams.toString()}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok || tokenData.error || !tokenData.access_token) {
+        const errorMsg = tokenData.error?.message || 'Authorization code exchange failed';
+        console.error('[EmbeddedSignup] Token exchange failed:', errorMsg);
+        throw new Error(`Meta authorization code exchange failed: ${errorMsg}`);
+      }
+
+      const accessToken = tokenData.access_token;
+
+      // Step 2: Verify credentials against Meta Graph API
+      const verifyResult = await this.metaProvider.verifyCredentials({
+        phoneNumberId,
+        accessToken
+      });
+
+      if (!verifyResult.valid) {
+        throw new Error(verifyResult.error || 'Meta credentials verification failed after code exchange.');
+      }
+
+      // Step 3: Subscribe WABA to webhook
+      try {
+        await this.subscribeWABAToWebhook(wabaId, accessToken, META_GRAPH_API_VERSION);
+      } catch (subscribeErr) {
+        console.warn('[EmbeddedSignup] WABA subscription warning:', subscribeErr.message);
+        // Continue even if subscription fails - user can manually subscribe in Meta dashboard
+      }
+
+      // Step 4: Store connection securely
+      const saved = db.saveWhatsAppConnection(businessId, "meta", {
+        status: "connected",
+        phoneNumber: verifyResult.displayPhoneNumber,
+        phoneNumberId: phoneNumberId,
+        wabaId: wabaId,
+        accessToken: accessToken, // Store securely - never expose to client
+        statusMessage: `Connected via Embedded Signup (${verifyResult.verifiedName || verifyResult.displayPhoneNumber})`,
+        connectedAt: new Date().toISOString(),
+        webhookStatus: 'subscribed',
+        onboardingMethod: 'embedded_signup'
+      });
+
+      return {
+        success: true,
+        provider: "meta",
+        status: "connected",
+        displayPhoneNumber: verifyResult.displayPhoneNumber,
+        verifiedName: verifyResult.verifiedName,
+        wabaId: wabaId,
+        phoneNumberId: phoneNumberId,
+        maskedToken: this.metaProvider.maskToken(accessToken)
+      };
+    } catch (err) {
+      console.error('[EmbeddedSignup] Exchange error:', err.message);
+
+      // Record failure state
+      db.saveWhatsAppConnection(businessId, "meta", {
+        status: "disconnected",
+        phoneNumberId: phoneNumberId,
+        wabaId: wabaId,
+        accessToken: "",
+        statusMessage: `Embedded Signup failed: ${err.message}`
+      });
+
+      throw err;
+    }
+  }
+
+  /**
+   * Subscribe WABA to app webhook (required for receiving messages)
+   */
+  async subscribeWABAToWebhook(wabaId, accessToken, apiVersion = 'v21.0') {
+    const subscribeUrl = `https://graph.facebook.com/${apiVersion}/${wabaId}/subscribed_apps`;
+
+    const response = await fetch(subscribeUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      const errorMsg = result.error?.message || 'WABA subscription failed';
+      throw new Error(`Failed to subscribe WABA to webhook: ${errorMsg}`);
+    }
+
+    return { success: true, subscribed: result.success === true };
+  }
+
+  /**
    * Connect and verify real Meta WhatsApp Business credentials
    */
   async connectMeta(businessId = "biz-default", { phoneNumberId, wabaId, accessToken }) {

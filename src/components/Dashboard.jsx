@@ -349,6 +349,7 @@ export default function Dashboard({ user, csrfToken: initialCsrfToken, onLogout 
         status={whatsappStatus}
         onConnect={handleConnectWhatsApp}
         onDisconnect={handleDisconnectWhatsApp}
+        csrfToken={csrfToken}
       />
     </div>
   );

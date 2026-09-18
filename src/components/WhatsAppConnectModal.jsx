@@ -1,24 +1,27 @@
-import React, { useState } from 'react';
-import { 
-  X, 
-  Radio, 
-  QrCode, 
-  CheckCircle2, 
-  AlertTriangle, 
-  ShieldCheck, 
-  Phone, 
-  ArrowRight, 
-  Code2, 
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Radio,
+  QrCode,
+  CheckCircle2,
+  AlertTriangle,
+  ShieldCheck,
+  Phone,
+  ArrowRight,
+  Code2,
   Info,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
+import { apiFetch } from '../lib/api.js';
 
 export default function WhatsAppConnectModal({
   isOpen,
   onClose,
   status,
   onConnect,
-  onDisconnect
+  onDisconnect,
+  csrfToken
 }) {
   if (!isOpen) return null;
 
@@ -26,8 +29,77 @@ export default function WhatsAppConnectModal({
   const [phoneNumber, setPhoneNumber] = useState(status?.phoneNumber || '+1 (555) 019-2831');
   const [isProcessing, setIsProcessing] = useState(false);
   const [qrKey, setQrKey] = useState(1);
+  const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
+  const [embeddedSignupStatus, setEmbeddedSignupStatus] = useState('');
 
   const isConnected = status?.connected;
+  const metaConnected = status?.meta?.status === 'connected';
+
+  // Load Facebook SDK
+  useEffect(() => {
+    if (!window.FB && !document.getElementById('facebook-jssdk')) {
+      window.fbAsyncInit = function() {
+        window.FB.init({
+          appId: '230831096602291',
+          cookie: true,
+          xfbml: true,
+          version: 'v21.0'
+        });
+        setFbSdkLoaded(true);
+      };
+
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    } else if (window.FB) {
+      setFbSdkLoaded(true);
+    }
+  }, []);
+
+  // Listen for Embedded Signup session info
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Only accept messages from Facebook
+      if (event.origin !== 'https://www.facebook.com') {
+        return;
+      }
+
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+        // Verify this is an Embedded Signup message
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          console.log('[EmbeddedSignup] Session info received');
+
+          // Extract WABA and phone information
+          if (data.event === 'FINISH' && data.data) {
+            const { phone_number_id, waba_id } = data.data;
+
+            if (phone_number_id && waba_id) {
+              console.log('[EmbeddedSignup] WABA onboarding completed', {
+                wabaId: waba_id,
+                phoneNumberId: phone_number_id
+              });
+
+              // Store for authorization code exchange
+              window.__embeddedSignupData = {
+                wabaId: waba_id,
+                phoneNumberId: phone_number_id
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[EmbeddedSignup] Invalid postMessage:', err);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const handleToggleConnect = async () => {
     setIsProcessing(true);
@@ -44,10 +116,128 @@ export default function WhatsAppConnectModal({
     }
   };
 
+  const handleMetaEmbeddedSignup = () => {
+    if (!fbSdkLoaded || !window.FB) {
+      alert('Facebook SDK is still loading. Please try again in a moment.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setEmbeddedSignupStatus('Opening Meta Embedded Signup...');
+
+    window.FB.login((response) => {
+      if (response.authResponse) {
+        const authCode = response.authResponse.code;
+
+        setEmbeddedSignupStatus('Processing authorization...');
+
+        // Get session info from postMessage listener
+        const sessionData = window.__embeddedSignupData;
+
+        if (!sessionData || !sessionData.wabaId || !sessionData.phoneNumberId) {
+          setEmbeddedSignupStatus('');
+          setIsProcessing(false);
+          alert('Could not retrieve WABA information. Please try again.');
+          return;
+        }
+
+        // Exchange authorization code on backend
+        exchangeAuthorizationCode(authCode, sessionData.wabaId, sessionData.phoneNumberId);
+      } else {
+        setEmbeddedSignupStatus('');
+        setIsProcessing(false);
+        console.log('[EmbeddedSignup] User cancelled or login failed');
+      }
+    }, {
+      config_id: '1737194977391820',
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        version: 'v4',
+        sessionInfoVersion: 3
+      }
+    });
+  };
+
+  const exchangeAuthorizationCode = async (code, wabaId, phoneNumberId) => {
+    try {
+      setEmbeddedSignupStatus('Connecting to WhatsApp Business...');
+
+      const response = await apiFetch('/api/whatsapp/embedded-signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({
+          code,
+          wabaId,
+          phoneNumberId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to connect WhatsApp Business');
+      }
+
+      setEmbeddedSignupStatus('Connected successfully!');
+
+      // Clear session data
+      delete window.__embeddedSignupData;
+
+      // Refresh status
+      setTimeout(() => {
+        setIsProcessing(false);
+        setEmbeddedSignupStatus('');
+        onClose();
+        window.location.reload(); // Refresh to show new connection
+      }, 1500);
+
+    } catch (err) {
+      console.error('[EmbeddedSignup] Exchange error:', err);
+      setEmbeddedSignupStatus('');
+      setIsProcessing(false);
+      alert('Failed to connect WhatsApp: ' + err.message);
+    }
+  };
+
+  const handleMetaDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect your WhatsApp Business account?')) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await apiFetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({ provider: 'meta' })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to disconnect');
+      }
+
+      onClose();
+      window.location.reload();
+    } catch (err) {
+      alert('Error disconnecting: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-        
+
         {/* Modal Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -57,13 +247,14 @@ export default function WhatsAppConnectModal({
             <div>
               <h2 className="font-bold text-sm">WhatsApp Connection Center</h2>
               <span className="text-[10px] text-emerald-400 font-medium">
-                {status?.isMock ? 'Sandbox Mode Active' : 'Meta API Mode'}
+                {status?.isMock ? 'Sandbox Mode Active' : 'Production Mode'}
               </span>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            disabled={isProcessing}
           >
             <X className="w-4 h-4" />
           </button>
@@ -79,18 +270,17 @@ export default function WhatsAppConnectModal({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Sandbox Connection
+            Connect WhatsApp
           </button>
           <button
-            onClick={() => setActiveTab('meta-guide')}
-            className={`flex-1 py-2.5 text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
-              activeTab === 'meta-guide'
+            onClick={() => setActiveTab('sandbox')}
+            className={`flex-1 py-2.5 text-center border-b-2 transition-colors ${
+              activeTab === 'sandbox'
                 ? 'border-emerald-600 text-emerald-700 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Code2 className="w-3.5 h-3.5" />
-            Meta API Production Roadmap
+            Sandbox / Test Mode
           </button>
         </div>
 
@@ -98,7 +288,108 @@ export default function WhatsAppConnectModal({
         <div className="p-6">
           {activeTab === 'connect' ? (
             <div className="space-y-5">
-              
+
+              {/* Meta Connection Status */}
+              {metaConnected ? (
+                <div className="p-4 rounded-xl border bg-emerald-50/70 border-emerald-200 text-emerald-950">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-500 text-white">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs">WhatsApp Business Connected</h3>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          {status?.meta?.phoneNumber || 'Connected'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-emerald-800">Phone Number ID:</span>
+                      <span className="font-mono text-emerald-900">{status?.meta?.phoneNumberId?.slice(-8) || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-800">WABA ID:</span>
+                      <span className="font-mono text-emerald-900">{status?.meta?.wabaId?.slice(-8) || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleMetaDisconnect}
+                    disabled={isProcessing}
+                    className="mt-4 w-full px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
+                  >
+                    {isProcessing ? 'Disconnecting...' : 'Disconnect WhatsApp Business'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Meta Embedded Signup */}
+                  <div className="p-4 rounded-xl border bg-slate-50 border-slate-200">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500 text-white shrink-0">
+                        <Phone className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-sm text-slate-900">Connect Your WhatsApp Business</h3>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Use Meta's official Embedded Signup to connect your WhatsApp Business account securely.
+                        </p>
+                      </div>
+                    </div>
+
+                    {embeddedSignupStatus && (
+                      <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {embeddedSignupStatus}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleMetaEmbeddedSignup}
+                      disabled={isProcessing || !fbSdkLoaded}
+                      className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-2"
+                    >
+                      {!fbSdkLoaded ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : isProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          Connect WhatsApp Business
+                        </>
+                      )}
+                    </button>
+
+                    <p className="text-[11px] text-slate-500 mt-3 text-center">
+                      Secure OAuth 2.0 authentication via Meta
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="font-bold">Production WhatsApp Connection:</span> Connect your real WhatsApp Business number to receive and respond to customer messages with AI.
+                    </div>
+                  </div>
+                </>
+              )}
+
+            </div>
+          ) : (
+            /* Sandbox Tab */
+            <div className="space-y-5">
+
               {/* Sandbox Transparency Notice */}
               <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed flex items-start gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -179,7 +470,7 @@ export default function WhatsAppConnectModal({
                     <rect x="66" y="76" width="14" height="8" fill="#0f172a" />
                     <rect x="84" y="72" width="6" height="12" fill="#0f172a" />
                   </svg>
-                  
+
                   {isConnected && (
                     <div className="absolute inset-0 bg-emerald-950/80 rounded-xl backdrop-blur-xs flex flex-col items-center justify-center text-white">
                       <CheckCircle2 className="w-8 h-8 text-emerald-400 mb-1 animate-bounce" />
@@ -189,7 +480,7 @@ export default function WhatsAppConnectModal({
                 </div>
 
                 <p className="text-[11px] text-slate-500 mt-2 font-medium">
-                  {isConnected 
+                  {isConnected
                     ? 'Simulated WhatsApp device paired successfully.'
                     : 'Scan with WhatsApp to link test business number.'}
                 </p>
@@ -219,35 +510,6 @@ export default function WhatsAppConnectModal({
               </div>
 
             </div>
-          ) : (
-            /* Meta API Production Guide Tab */
-            <div className="space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 leading-relaxed">
-                <p className="font-bold flex items-center gap-1.5">
-                  <Info className="w-4 h-4 text-blue-600" />
-                  Moving from Mock to Official Meta Cloud API
-                </p>
-                <p className="mt-1 text-[11px] text-blue-800">
-                  The codebase has an official Meta Cloud API provider already structured at <code className="font-mono bg-blue-100 px-1 py-0.5 rounded">server/services/whatsapp/metaProvider.js</code>.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-bold text-slate-900 text-xs">Required Environment Variables:</h4>
-                <div className="bg-slate-900 text-emerald-400 p-3 rounded-xl font-mono text-[11px] space-y-1 overflow-x-auto">
-                  <div>WHATSAPP_PROVIDER=meta</div>
-                  <div>WHATSAPP_PHONE_NUMBER_ID=your_meta_phone_id</div>
-                  <div>WHATSAPP_BUSINESS_ACCOUNT_ID=your_waba_id</div>
-                  <div>WHATSAPP_API_TOKEN=your_system_user_token</div>
-                  <div>WHATSAPP_VERIFY_TOKEN=your_webhook_verify_token</div>
-                </div>
-              </div>
-
-              <div className="space-y-2 text-[11px] text-slate-600">
-                <p><strong>1. Webhook Endpoint:</strong> <code className="bg-slate-100 px-1 py-0.5 rounded">POST /api/whatsapp/webhook</code> is pre-built to handle incoming Meta messages.</p>
-                <p><strong>2. Full Guide:</strong> See <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">WHATSAPP_INTEGRATION_GUIDE.md</code> for step-by-step Meta Developer setup instructions.</p>
-              </div>
-            </div>
           )}
         </div>
 
@@ -255,7 +517,8 @@ export default function WhatsAppConnectModal({
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors"
+            disabled={isProcessing}
+            className="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors disabled:opacity-50"
           >
             Close
           </button>
