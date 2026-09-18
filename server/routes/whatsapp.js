@@ -62,14 +62,4 @@ router.post('/embedded-signup', requireRole('OWNER'), async (req, res) => {
   }
 });
 
-// Official Meta Cloud API onboarding callback/credential handoff. This endpoint
-// never returns a token and is intentionally distinct from the sandbox route.
-router.post('/meta/connect', requireRole('OWNER'), async (req, res) => {
-  try {
-    const result = await whatsAppService.connectMeta(getBusinessId(req), req.body || {});
-    res.json({ success: true, result });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
 export default router;

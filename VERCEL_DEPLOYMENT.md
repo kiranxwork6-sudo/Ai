@@ -132,14 +132,8 @@ GEMINI_SUPPORTED_LANGUAGES=English,Malayalam
 ### WhatsApp Configuration
 ```bash
 WHATSAPP_PROVIDER=mock
-# For production Meta WhatsApp API:
-# WHATSAPP_PROVIDER=meta
-# META_APP_ID=<your-meta-app-id>
-# META_APP_SECRET=<your-meta-app-secret>
-# META_VERIFY_TOKEN=<your-verify-token>
-# WHATSAPP_ACCESS_TOKEN=<your-whatsapp-token>
-# WHATSAPP_PHONE_NUMBER_ID=<your-phone-number-id>
-# WHATSAPP_BUSINESS_ACCOUNT_ID=<your-business-account-id>
+# For production Meta Embedded Signup, configure the server-side META_* values
+# and the public VITE_META_* values described in META_GEREPLY_SETUP.md.
 ```
 
 ### Optional

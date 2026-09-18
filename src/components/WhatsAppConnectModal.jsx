@@ -14,6 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
+import { hasMetaPublicConfig, metaPublicConfig } from '../lib/metaConfig.js';
 
 export default function WhatsAppConnectModal({
   isOpen,
@@ -37,15 +38,20 @@ export default function WhatsAppConnectModal({
 
   // Load Facebook SDK
   useEffect(() => {
+    if (!hasMetaPublicConfig()) {
+      setFbSdkLoaded(false);
+      return undefined;
+    }
+
     if (!window.FB && !document.getElementById('facebook-jssdk')) {
       window.fbAsyncInit = function() {
         window.FB.init({
-          appId: '230831096602291',
+          appId: metaPublicConfig.appId,
           cookie: true,
           xfbml: true,
           version: 'v21.0'
         });
-        setFbSdkLoaded(true);
+        setFbSdkLoaded(hasMetaPublicConfig());
       };
 
       const script = document.createElement('script');
@@ -55,7 +61,7 @@ export default function WhatsAppConnectModal({
       script.defer = true;
       document.body.appendChild(script);
     } else if (window.FB) {
-      setFbSdkLoaded(true);
+      setFbSdkLoaded(hasMetaPublicConfig());
     }
   }, []);
 
@@ -117,6 +123,10 @@ export default function WhatsAppConnectModal({
   };
 
   const handleMetaEmbeddedSignup = () => {
+    if (!hasMetaPublicConfig()) {
+      alert('Meta Embedded Signup is not configured for this deployment.');
+      return;
+    }
     if (!fbSdkLoaded || !window.FB) {
       alert('Facebook SDK is still loading. Please try again in a moment.');
       return;
@@ -149,7 +159,7 @@ export default function WhatsAppConnectModal({
         console.log('[EmbeddedSignup] User cancelled or login failed');
       }
     }, {
-      config_id: '1737194977391820',
+      config_id: metaPublicConfig.embeddedSignupConfigId,
       response_type: 'code',
       override_default_response_type: true,
       extras: {

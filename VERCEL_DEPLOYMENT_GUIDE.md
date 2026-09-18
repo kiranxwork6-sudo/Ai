@@ -35,11 +35,12 @@ git push -u origin main
    - **Build Command**: `vite build` (preset automatically).
    - **Output Directory**: `dist` (preset automatically).
 5. Under **Environment Variables**, expand the section and add your variables:
-   - `WHATSAPP_PROVIDER`: `mock` (or `meta` if using official WhatsApp API)
+   - `WHATSAPP_PROVIDER`: `mock` for the simulator, or `meta` for production
+   - `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`
+   - `META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_GRAPH_API_VERSION`
+   - `META_SYSTEM_USER_ACCESS_TOKEN` when required for server-side Meta operations
+   - `VITE_META_APP_ID`, `VITE_META_EMBEDDED_SIGNUP_CONFIG_ID`
    - `GEMINI_API_KEY`: *(Optional)* Your Google Gemini API key
-   - `WHATSAPP_PHONE_NUMBER_ID`: *(Optional)* Meta Phone Number ID
-   - `WHATSAPP_API_TOKEN`: *(Optional)* Meta Permanent System User Access Token
-   - `WHATSAPP_VERIFY_TOKEN`: *(Optional)* Webhook verification token (e.g. `ai_receptionist_verify_token_123`)
 6. Click **Deploy**.
 
 Within 1-2 minutes, Vercel will build and assign you a live HTTPS URL (e.g., `https://ai-receptionist-xyz.vercel.app`)!

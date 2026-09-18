@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getMetaConfig } from '../../config/meta.js';
 
 /**
  * Official WhatsApp Business Cloud API Provider (Meta Graph API v21.0)
@@ -10,19 +11,10 @@ export class MetaWhatsAppProvider {
   constructor() {
     this.name = 'meta';
     this.isMock = false;
-    this.apiUrl = 'https://graph.facebook.com/v21.0';
-    this.verifyToken = process.env.META_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN;
-    this.appSecret = process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET;
-  }
-
-  /**
-   * Safely mask an access token for display in the UI without exposing secrets.
-   * e.g. "EAAG...1234"
-   */
-  maskToken(token) {
-    if (!token || typeof token !== 'string') return '';
-    if (token.length <= 10) return '••••••••';
-    return `${token.slice(0, 4)}...${token.slice(-4)}`;
+    const config = getMetaConfig();
+    this.apiUrl = `https://graph.facebook.com/${config.graphApiVersion}`;
+    this.verifyToken = config.verifyToken;
+    this.appSecret = config.appSecret;
   }
 
   /**
@@ -33,7 +25,7 @@ export class MetaWhatsAppProvider {
    * @param {string} params.phoneNumberId - Meta Phone Number ID
    * @param {string} params.accessToken - System User or User Access Token
    */
-  async verifyCredentials({ phoneNumberId, accessToken }) {
+  async verifyCredentials({ phoneNumberId, accessToken, expectedWabaId }) {
     if (!phoneNumberId || !phoneNumberId.trim()) {
       return { valid: false, error: 'Phone Number ID is required.' };
     }
@@ -46,7 +38,7 @@ export class MetaWhatsAppProvider {
 
     try {
       // Query Meta Graph API for phone number details
-      const url = `${this.apiUrl}/${cleanPhoneId}?fields=verified_name,display_phone_number,quality_rating,code_verification_status`;
+      const url = `${this.apiUrl}/${encodeURIComponent(cleanPhoneId)}?fields=id,verified_name,display_phone_number,quality_rating,code_verification_status,whatsapp_business_account`;
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${cleanToken}`,
@@ -64,12 +56,18 @@ export class MetaWhatsAppProvider {
         };
       }
 
+      const actualWabaId = String(data.whatsapp_business_account?.id || '');
+      if (expectedWabaId && actualWabaId !== String(expectedWabaId).trim()) {
+        return { valid: false, error: 'Meta returned a different WhatsApp Business Account for this phone number.' };
+      }
+
       return {
         valid: true,
         displayPhoneNumber: data.display_phone_number || 'Registered WhatsApp Number',
         verifiedName: data.verified_name || '',
         qualityRating: data.quality_rating || 'UNKNOWN',
-        phoneNumberId: cleanPhoneId
+        phoneNumberId: cleanPhoneId,
+        wabaId: actualWabaId
       };
     } catch (err) {
       return {

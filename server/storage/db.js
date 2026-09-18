@@ -483,12 +483,7 @@ class Database {
     const conn = (this.data.whatsapp_connections || []).find(
       c => c.provider === "meta" && c.phoneNumberId === cleanId
     );
-    if (!conn) {
-      // Single-tenant server configuration is safe only when the incoming ID exactly
-      // matches the server environment. It never accepts arbitrary phone IDs.
-      if (cleanId === String(process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim()) return this.getBusiness('biz-default');
-      return null;
-    }
+    if (!conn || conn.status !== 'connected') return null;
     return this.getBusiness(conn.businessId);
   }
 
