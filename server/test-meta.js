@@ -33,6 +33,9 @@ try {
   assert.throws(() => assertMetaAppConfig(), /META_APP_ID, META_APP_SECRET, and META_EMBEDDED_SIGNUP_CONFIG_ID/, 'incomplete Meta config must fail safely');
 
   const modalSource = read('src/components/WhatsAppConnectModal.jsx');
+  const publicConfigSource = read('src/lib/metaConfig.js');
+  assert.match(publicConfigSource, /EXPECTED_META_APP_ID = '230831096602291'/, 'client must pin the Gereply App ID');
+  assert.match(publicConfigSource, /EXPECTED_META_EMBEDDED_SIGNUP_CONFIG_ID = '1737194977391820'/, 'client must pin the Gereply Embedded Signup Config ID');
   assert.match(modalSource, /metaPublicConfig\.appId/, 'FB.init must use the public App ID config');
   assert.match(modalSource, /metaPublicConfig\.embeddedSignupConfigId/, 'FB.login must use the public Config ID config');
   assert.doesNotMatch(modalSource, /appId:\s*['"]\d+['"]/, 'App ID must not be hardcoded in the frontend');

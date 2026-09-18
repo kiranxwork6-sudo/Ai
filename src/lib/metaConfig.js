@@ -1,4 +1,6 @@
 const readPublicValue = (value) => typeof value === 'string' ? value.trim() : '';
+export const EXPECTED_META_APP_ID = '230831096602291';
+export const EXPECTED_META_EMBEDDED_SIGNUP_CONFIG_ID = '1737194977391820';
 
 export const metaPublicConfig = Object.freeze({
   appId: readPublicValue(import.meta.env.VITE_META_APP_ID),
@@ -16,6 +18,6 @@ export function logMetaPublicConfig() {
 }
 
 export function hasMetaPublicConfig() {
-  return /^\d+$/.test(metaPublicConfig.appId)
-    && /^\d+$/.test(metaPublicConfig.embeddedSignupConfigId);
+  return metaPublicConfig.appId === EXPECTED_META_APP_ID
+    && metaPublicConfig.embeddedSignupConfigId === EXPECTED_META_EMBEDDED_SIGNUP_CONFIG_ID;
 }
