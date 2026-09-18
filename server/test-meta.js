@@ -38,6 +38,9 @@ try {
   assert.match(publicConfigSource, /EXPECTED_META_EMBEDDED_SIGNUP_CONFIG_ID = '1737194977391820'/, 'client must pin the Gereply Embedded Signup Config ID');
   assert.match(modalSource, /metaPublicConfig\.appId/, 'FB.init must use the public App ID config');
   assert.match(modalSource, /metaPublicConfig\.embeddedSignupConfigId/, 'FB.login must use the public Config ID config');
+  assert.match(modalSource, /FB\.init completed/, 'FB.init completion must be diagnosable');
+  assert.match(modalSource, /FB\.login called/, 'FB.login reachability must be diagnosable');
+  assert.match(modalSource, /Unable to load WhatsApp signup/, 'SDK failures must leave the loading state');
   assert.doesNotMatch(modalSource, /appId:\s*['"]\d+['"]/, 'App ID must not be hardcoded in the frontend');
   assert.doesNotMatch(modalSource, /config_id:\s*['"]\d+['"]/, 'Config ID must not be hardcoded in the frontend');
   assert.doesNotMatch(modalSource, /META_APP_SECRET|META_SYSTEM_USER_ACCESS_TOKEN|GEMINI_API_KEY|SESSION_SECRET/, 'server secrets must not appear in frontend source');

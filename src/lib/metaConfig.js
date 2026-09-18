@@ -9,11 +9,8 @@ export const metaPublicConfig = Object.freeze({
 
 export function logMetaPublicConfig() {
   console.info('[MetaConfig]', {
-    appIdPresent: Boolean(metaPublicConfig.appId),
-    appIdLength: metaPublicConfig.appId.length,
-    appIdValue: metaPublicConfig.appId || '(missing)',
-    configIdPresent: Boolean(metaPublicConfig.embeddedSignupConfigId),
-    configIdLength: metaPublicConfig.embeddedSignupConfigId.length
+    runtimeMetaAppId: metaPublicConfig.appId || '(missing)',
+    runtimeConfigId: metaPublicConfig.embeddedSignupConfigId || '(missing)'
   });
 }
 

@@ -31,6 +31,7 @@ export default function WhatsAppConnectModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [qrKey, setQrKey] = useState(1);
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
+  const [fbSdkError, setFbSdkError] = useState('');
   const [embeddedSignupStatus, setEmbeddedSignupStatus] = useState('');
 
   const isConnected = status?.connected;
@@ -42,18 +43,38 @@ export default function WhatsAppConnectModal({
 
     if (!hasMetaPublicConfig()) {
       setFbSdkLoaded(false);
+      setFbSdkError('Unable to load WhatsApp signup. Check your Meta configuration.');
       return undefined;
     }
 
+    const timeoutId = window.setTimeout(() => {
+      setFbSdkError('Unable to load WhatsApp signup. Check your Meta configuration.');
+    }, 10000);
+
+    const markSdkReady = () => {
+      window.FB.getLoginStatus((response) => {
+        console.info('[MetaSDK] FB.getLoginStatus completed', { status: response?.status || 'unknown' });
+      });
+      window.clearTimeout(timeoutId);
+      setFbSdkError('');
+      setFbSdkLoaded(true);
+    };
+
     if (!window.FB && !document.getElementById('facebook-jssdk')) {
       window.fbAsyncInit = function() {
-        window.FB.init({
-          appId: metaPublicConfig.appId,
-          cookie: true,
-          xfbml: true,
-          version: 'v21.0'
-        });
-        setFbSdkLoaded(Boolean(window.FB) && hasMetaPublicConfig());
+        try {
+          window.FB.init({
+            appId: metaPublicConfig.appId,
+            cookie: true,
+            xfbml: true,
+            version: 'v21.0'
+          });
+          console.info('[MetaSDK] FB.init completed', { runtimeMetaAppId: metaPublicConfig.appId });
+          markSdkReady();
+        } catch (error) {
+          window.clearTimeout(timeoutId);
+          setFbSdkError(`Unable to load WhatsApp signup: ${error.message}`);
+        }
       };
 
       const script = document.createElement('script');
@@ -61,10 +82,21 @@ export default function WhatsAppConnectModal({
       script.src = 'https://connect.facebook.net/en_US/sdk.js';
       script.async = true;
       script.defer = true;
+      script.onerror = () => {
+        window.clearTimeout(timeoutId);
+        setFbSdkError('Unable to load WhatsApp signup: Facebook SDK failed to load.');
+      };
       document.body.appendChild(script);
     } else if (window.FB) {
-      setFbSdkLoaded(hasMetaPublicConfig());
+      try {
+        markSdkReady();
+      } catch (error) {
+        window.clearTimeout(timeoutId);
+        setFbSdkError(`Unable to load WhatsApp signup: ${error.message}`);
+      }
     }
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   // Listen for Embedded Signup session info
@@ -136,6 +168,10 @@ export default function WhatsAppConnectModal({
 
     setIsProcessing(true);
     setEmbeddedSignupStatus('Opening Meta Embedded Signup...');
+    console.info('[MetaSDK] FB.login called', {
+      runtimeMetaAppId: metaPublicConfig.appId,
+      runtimeConfigId: metaPublicConfig.embeddedSignupConfigId
+    });
 
     window.FB.login((response) => {
       if (response.authResponse) {
@@ -353,19 +389,24 @@ export default function WhatsAppConnectModal({
                       </div>
                     </div>
 
-                    {embeddedSignupStatus && (
+                    {(embeddedSignupStatus || fbSdkError) && (
                       <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {embeddedSignupStatus}
+                        {fbSdkError ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <Loader2 className="w-4 h-4 animate-spin" />}
+                        {fbSdkError || embeddedSignupStatus}
                       </div>
                     )}
 
                     <button
                       onClick={handleMetaEmbeddedSignup}
-                      disabled={isProcessing || !fbSdkLoaded}
+                      disabled={isProcessing || !fbSdkLoaded || Boolean(fbSdkError)}
                       className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-2"
                     >
-                      {!fbSdkLoaded ? (
+                      {fbSdkError ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4" />
+                          Signup unavailable
+                        </>
+                      ) : !fbSdkLoaded ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Loading...
