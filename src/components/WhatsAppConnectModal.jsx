@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
-import { hasMetaPublicConfig, metaPublicConfig } from '../lib/metaConfig.js';
+import { hasMetaPublicConfig, logMetaPublicConfig, metaPublicConfig } from '../lib/metaConfig.js';
 
 export default function WhatsAppConnectModal({
   isOpen,
@@ -38,6 +38,8 @@ export default function WhatsAppConnectModal({
 
   // Load Facebook SDK
   useEffect(() => {
+    logMetaPublicConfig();
+
     if (!hasMetaPublicConfig()) {
       setFbSdkLoaded(false);
       return undefined;
@@ -51,7 +53,7 @@ export default function WhatsAppConnectModal({
           xfbml: true,
           version: 'v21.0'
         });
-        setFbSdkLoaded(hasMetaPublicConfig());
+        setFbSdkLoaded(Boolean(window.FB) && hasMetaPublicConfig());
       };
 
       const script = document.createElement('script');
